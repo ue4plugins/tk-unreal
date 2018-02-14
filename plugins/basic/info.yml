@@ -1,0 +1,41 @@
+# Copyright (c) 2018 Shotgun Software Inc.
+#
+# CONFIDENTIAL AND PROPRIETARY
+#
+# This work is provided "AS IS" and subject to the Shotgun Pipeline Toolkit
+# Source Code License included in this distribution package. See LICENSE.
+# By accessing, using, copying or modifying this work you indicate your
+# agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
+# not expressly granted therein are reserved by Shotgun Software Inc.
+
+
+base_configuration:
+  # The default configuration that the plugin should use.
+  # For documentation and details, see
+  # http://developer.shotgunsoftware.com/tk-core/bootstrap.html#sgtk.bootstrap.ToolkitManager.base_configuration
+  #
+  # This is expressed in the form of a Toolkit Descriptor. For more
+  # information about Toolkit descriptors, see
+  # http://developer.shotgunsoftware.com/tk-core/descriptor.html
+  #
+  # If your descriptor supports a version token and you want it to
+  # always use the latest version available, simply omit the version token.
+  # type: app_store
+  # name: tk-config-basic
+  type: git_branch
+  path: git@github.com:shotgunsoftware/tk-config-unreal.git
+  branch: master
+  # type: path
+  # path: ~/gitlocal/tk-config-unreal
+
+
+# The Plugin Id helps uniquely identify this plugin and can be
+# used to override and customize it. For more information, see
+# http://developer.shotgunsoftware.com/tk-core/bootstrap.html#sgtk.bootstrap.ToolkitManager.plugin_id
+#
+# When the plugin is built, this file will be converted into a manifest.py file
+# and located in a python module named based on the plugin id in order to ensure
+# uniqueness. If your plugin_id is set to 'review.maya', the python module
+# will be called sgtk_plugin_review_maya and will be located in a python subfolder
+# once the plugin has been built.
+plugin_id: "basic.unreal"

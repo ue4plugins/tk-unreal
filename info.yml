@@ -1,0 +1,45 @@
+# Copyright (c) 2018 Shotgun Software Inc.
+#
+# CONFIDENTIAL AND PROPRIETARY
+#
+# This work is provided "AS IS" and subject to the Shotgun Pipeline Toolkit
+# Source Code License included in this distribution package. See LICENSE.
+# By accessing, using, copying or modifying this work you indicate your
+# agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
+# not expressly granted therein are reserved by Shotgun Software Inc.
+
+# Metadata defining the behaviour and requirements for this engine
+
+# expected fields in the configuration file for this engine
+configuration:
+
+    debug_logging: 
+        type: bool
+        description: Controls whether debug messages should be emitted to the logger
+        default_value: false
+
+    menu_favourites:
+        type: list
+        description: "Controls the favourites section on the main menu. This is a list
+                     and each menu item is a dictionary with keys app_instance and name.
+                     The app_instance parameter connects this entry to a particular
+                     app instance defined in the environment configuration file. The name
+                     is a menu name to make a favourite."
+        allows_empty: True
+        values:
+            type: dict
+            items:
+                name: { type: str }
+                app_instance: { type: str }
+
+# the Shotgun fields that this engine needs in order to operate correctly
+requires_shotgun_fields:
+        
+# More verbose description of this item 
+display_name: "Shotgun Engine for Unreal Editor"
+description: "Shotgun Integration in Unreal Editor"
+
+# Required minimum versions for this item to run
+requires_shotgun_version:
+requires_core_version: "v0.18.8"
+
