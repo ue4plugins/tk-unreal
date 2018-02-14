@@ -112,7 +112,7 @@ class EngineLauncher(SoftwareLauncher):
             # to have an name specific for this mix of executable path and command line arguments.
             "Unreal Engine 4",
             # Path to the executable to launch.
-            "/Users/Shared/Epic Games/UE_4.19/Engine/Binaries/Mac/UE4Editor.app/Contents/MacOS/UE4Editor",
+            "C:\Program Files\Epic Games\UE_4.19\Engine\Binaries\Win64\UE4Editor.exe",
             # Path to the icon of disk representing the engine.
             os.path.join(self.disk_location, "icon_256.png"),
         )
