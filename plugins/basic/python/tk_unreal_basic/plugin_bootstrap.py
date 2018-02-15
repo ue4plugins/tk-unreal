@@ -106,11 +106,6 @@ def _initialize_manager(plugin_root_path):
     toolkit_mgr.progress_callback = lambda pct, msg: print("{0} - {1}".format(int(pct * 100), msg))
 
     # Pulls the latest Unreal configuration from the master branch.
-    # toolkit_mgr.base_configuration = "sgtk:descriptor:git_branch?path={0}&branch={1}".format(
-    #     "git@github.com:shotgunsoftware/tk-config-unreal.git",
-    #     "master"
-    # )
-    toolkit_mgr.do_shotgun_config_lookup = False
     toolkit_mgr.base_configuration = base_config
     toolkit_mgr.plugin_id = plugin_id
 
