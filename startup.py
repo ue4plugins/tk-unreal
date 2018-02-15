@@ -9,8 +9,9 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import os
-
+import sys
 import pprint
+
 from sgtk.platform import SoftwareLauncher, SoftwareVersion, LaunchInformation
 
 
@@ -104,6 +105,11 @@ class EngineLauncher(SoftwareLauncher):
         """
         Find executables in the default install locations.
         """
+        if sys.platform == "darwin":
+            location = "/Users/Shared/Epic Games/UE_4.19/Engine/Binaries/Mac/UE4Editor.app/Contents/MacOS/UE4Editor"
+        else:
+            location = "C:\Program Files\Epic Games\UE_4.19\Engine\Binaries\Win64\UE4Editor.exe"
+
         yield SoftwareVersion(
             # Version of the DCC.
             "4.19",
@@ -112,7 +118,7 @@ class EngineLauncher(SoftwareLauncher):
             # to have an name specific for this mix of executable path and command line arguments.
             "Unreal Engine 4",
             # Path to the executable to launch.
-            "C:\Program Files\Epic Games\UE_4.19\Engine\Binaries\Win64\UE4Editor.exe",
+            location,
             # Path to the icon of disk representing the engine.
             os.path.join(self.disk_location, "icon_256.png"),
         )
