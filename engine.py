@@ -80,11 +80,13 @@ class UnrealEditorEngine(Engine):
         """
         # unicode characters returned by the shotgun api need to be converted
         # to display correctly in all of the app windows
-        from tank.platform.qt import QtCore
-        # tell QT to interpret C strings as utf-8
-        utf8 = QtCore.QTextCodec.codecForName("utf-8")
-        QtCore.QTextCodec.setCodecForCStrings(utf8)
-        self.logger.debug("set utf-8 codec for widget text")
+
+        # This is often necessary to get Qt to play nice with Python and utf-8.
+        # from tank.platform.qt import QtCore
+        # # tell QT to interpret C strings as utf-8
+        # utf8 = QtCore.QTextCodec.codecForName("utf-8")
+        # QtCore.QTextCodec.setCodecForCStrings(utf8)
+        # self.logger.debug("set utf-8 codec for widget text")
 
     def init_engine(self):
         """
