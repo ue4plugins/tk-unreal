@@ -22,11 +22,11 @@ base_configuration:
   # always use the latest version available, simply omit the version token.
   # type: app_store
   # name: tk-config-basic
-  type: git_branch
-  path: git@github.com:shotgunsoftware/tk-config-unreal.git
-  branch: master
-  # type: path
-  # path: ~/gitlocal/tk-config-unreal
+  #type: git_branch
+  #path: git@github.com:shotgunsoftware/tk-config-unreal.git
+  #branch: master
+  type: path
+  path: U:/Git/tk-config-unreal
 
 
 # The Plugin Id helps uniquely identify this plugin and can be

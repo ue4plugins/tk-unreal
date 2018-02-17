@@ -39,12 +39,21 @@ class EngineLauncher(SoftwareLauncher):
 
         :returns: :class:`LaunchInformation` instance
         """
+
+        bootstrap_path = os.path.join(self.disk_location, "plugins", "basic", "bootstrap.py")
+        args += ' -ExecCmds="py %s"' % bootstrap_path
+
         required_env = {}
         # Usually DCCs have an environment variable for plugins that need to be loaded.
         # Here we're adding ourselves to that list. We add ourselves to the existing one
         # in fact so we play nice with the current environment.
         required_env["UNREAL_PATH"] = self._join_paths_with_existing_env_paths(
             "UNREAL_PATH", os.path.join(self.disk_location, "startup")
+        )
+
+        #
+        required_env["PYTHONPATH"] = self._join_paths_with_existing_env_paths(
+            "PYTHONPATH", "C:\Program Files\Shotgun\Python\lib\site-packages"
         )
 
         # Add std context and site info to the env. This will add stuff like which site to
