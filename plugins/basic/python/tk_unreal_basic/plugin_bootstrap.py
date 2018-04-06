@@ -12,7 +12,7 @@
 from __future__ import print_function
 import sys
 import os
-
+import logging
 
 def bootstrap_plugin(plugin_root_path):
 
@@ -41,8 +41,7 @@ def bootstrap_plugin(plugin_root_path):
 
         import sgtk
 
-        sgtk.LogManager().initialize_base_file_handler("tk-unreal")
-        sgtk.LogManager().initialize_custom_handler()
+        _initialize_logger(sgtk.LogManager())
 
         manager = sgtk.bootstrap.ToolkitManager()
         manager.progress_callback = lambda pct, msg: print(
@@ -52,12 +51,31 @@ def bootstrap_plugin(plugin_root_path):
     else:
         manager = _initialize_manager(plugin_root_path)
 
+    # synchronous
     manager.bootstrap_engine(
         os.environ.get("SHOTGUN_ENGINE", "tk-unreal"),
         manager.get_entity_from_environment()
     )
+    _on_engine_initialized()
+    
+    # asynchronous doesn't work for now
+    # manager.bootstrap_engine_async(
+        # os.environ.get("SHOTGUN_ENGINE", "tk-unreal"),
+        # manager.get_entity_from_environment(),
+        # _on_engine_initialized
+    # )
 
+def _on_engine_initialized():
+    import sgtk
 
+    sgtk_logger = sgtk.LogManager.get_logger("plugin")
+    sgtk_logger.debug("tk-unreal finished initialization.")
+    
+    import unreal
+    
+    unreal.ShotgunEngine.get_instance().on_engine_initialized()
+
+    
 def _initialize_manager(plugin_root_path):
     """
     Initializes a ToolkitManager for use in zero-config mode.
@@ -80,10 +98,8 @@ def _initialize_manager(plugin_root_path):
 
     import sgtk
 
-    # start logging to log file
-    sgtk.LogManager().initialize_base_file_handler("tk-unreal")
-    sgtk.LogManager().initialize_custom_handler()
-
+    _initialize_logger(sgtk.LogManager())
+    
     # get a logger for the plugin
     sgtk_logger = sgtk.LogManager.get_logger("plugin")
     sgtk_logger.debug("Booting up toolkit plugin.")
@@ -110,3 +126,17 @@ def _initialize_manager(plugin_root_path):
     toolkit_mgr.plugin_id = plugin_id
 
     return toolkit_mgr
+
+def _initialize_logger(log_manager):
+    # start logging to log file
+    log_manager.initialize_base_file_handler("tk-unreal")
+
+    # force the StreamHandler to output to stdout instead of stderr
+    handler = logging.StreamHandler(sys.stdout)
+    # create formatter that follows this pattern: [DEBUG tank.log] message
+    formatter = logging.Formatter(
+        "[%(levelname)s %(name)s] %(message)s"
+    )
+    handler.setFormatter(formatter)
+
+    log_manager.initialize_custom_handler(handler)

@@ -20,6 +20,11 @@ from __future__ import print_function
 
 import pprint
 from sgtk.platform import Engine
+import sgtk.platform
+
+import unreal
+import sys
+from PySide2 import QtCore, QtWidgets, QtGui
 
 ###############################################################################################
 # The Shotgun Unreal engine
@@ -40,6 +45,14 @@ class UnrealEditorEngine(Engine):
     and that all logging calls to Toolkit logging methods will be forwarded there.
     It all uses the Python's logger under the hood.
     """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Engine Constructor
+        """
+        self._qt_app = None
+
+        Engine.__init__(self, *args, **kwargs)
 
     @property
     def context_change_allowed(self):
@@ -88,6 +101,11 @@ class UnrealEditorEngine(Engine):
         # QtCore.QTextCodec.setCodecForCStrings(utf8)
         # self.logger.debug("set utf-8 codec for widget text")
 
+        self.init_qt_app()
+
+        # Load the tk_unreal module (the Shotgun engine wrapper for Unreal)
+        self.tk_unreal = self.import_module("tk_unreal")
+
     def init_engine(self):
         """
         Initializes the engine.
@@ -98,6 +116,25 @@ class UnrealEditorEngine(Engine):
         # show a Qt dialog warning that this version of the tk-unreal engine might not be compatible
         # with the current version of the Unreal engine.
 
+    def init_qt_app(self):
+        self.logger.debug("%s: Initializing QtApp for Unreal", self)
+
+        if not QtWidgets.QApplication.instance():
+            self._qt_app = QtWidgets.QApplication(sys.argv)
+            unreal.log("Created QApplication instance: {0}".format(self._qt_app))
+
+            def _app_tick(dt):
+                # Threading issues cause instability with the next line; to be investigated further
+                # QtWidgets.QApplication.processEvents()
+                pass
+            
+            tick_handle = unreal.register_slate_post_tick_callback(_app_tick)
+
+            def _app_quit():
+                unreal.unregister_slate_post_tick_callback(tick_handle)
+                
+            QtWidgets.QApplication.instance().aboutToQuit.connect(_app_quit)
+    
     def post_app_init(self):
         """
         Called when all apps have initialized
@@ -259,7 +296,7 @@ class UnrealEditorEngine(Engine):
         # Assuming the Unreal Editor has a message dialog, you would call
         # here a method that allows to send text to that console. Note that
         # this method can be called from any thread that uses Toolkit logging.
-        print(msg)
+        unreal.log("{0}".format(msg))
 
     ##########################################################################################
     # panel support
