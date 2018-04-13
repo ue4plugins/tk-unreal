@@ -15,6 +15,7 @@ Hook that loads defines all the available actions, broken down by publish type.
 import pprint
 import os
 import sgtk
+import unreal
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -67,12 +68,12 @@ class UnrealActions(HookBaseClass):
 
         action_instances = []
 
-        if "reference" in actions:
-            action_instances.append({"name": "reference",
+        if "import_content" in actions:
+            action_instances.append({"name": "import_content",
                                      "params": None,
-                                     "caption": "Create Reference",
-                                     "description": "This will add the item to the scene as a standard reference."})
-
+                                     "caption": "Import into Content Browser",
+                                     "description": "This will import the asset into the Unreal Editor Content Browser."})
+        
         return action_instances
 
     def execute_multiple_actions(self, actions):
@@ -123,8 +124,8 @@ class UnrealActions(HookBaseClass):
         # resolve path
         path = self.get_publish_path(sg_publish_data)
 
-        if name == "reference":
-            self._create_reference(path, sg_publish_data)
+        if name == "import_content":
+            self._import_to_content_browser(path, sg_publish_data)
         else:
             try:
                 HookBaseClass.execute_action(self, name, params, sg_publish_data)
@@ -132,19 +133,138 @@ class UnrealActions(HookBaseClass):
                 # base class doesn't have the method, so ignore and continue
                 pass
 
-    ##############################################################################################################
-    # helper methods which can be subclassed in custom hooks to fine tune the behaviour of things
-
-    def _create_reference(self, path, sg_publish_data):
+    def _import_to_content_browser(self, path, sg_publish_data):
         """
-        Create a reference.
+        Import the asset into the Unreal Content Browser.
 
         :param path: Path to file.
         :param sg_publish_data: Shotgun data dictionary with all the standard publish fields.
         """
+        
+        unreal.log("File to import: {}".format(path))
+
         if not os.path.exists(path):
             raise Exception("File not found on disk - '%s'" % path)
 
-        print("Path %s: " % path)
-        print("Publish data:")
-        pprint.pprint(sg_publish_data)
+        destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
+        
+        _unreal_import_fbx_asset(path, destination_path, destination_name)
+
+    ##############################################################################################################
+    # helper methods which can be subclassed in custom hooks to fine tune the behaviour of things
+        
+    def _get_destination_path_and_name(self, sg_publish_data):
+        """
+        Get the destination path and name from the publish data and the templates
+
+        :param sg_publish_data: Shotgun data dictionary with all the standard publish fields.
+        :return destination_path that matches a template and destination_name from asset or published file
+        """
+        # Enable if needed while in development
+        # self.sgtk.reload_templates()
+
+        # Get the publish context which should be for an asset, task or project
+        context = self.sgtk.context_from_entity_dictionary(sg_publish_data)
+        # unreal.log("Publish data Context: {}".format(context))
+
+        # Query the fields that will be applied to templates
+        # We will select a template that matches the fields available
+        query_template = self.sgtk.templates["unreal_fields_query"]
+        fields = context.as_template_fields(query_template)
+        unreal.log("Template fields: {}".format(fields))
+
+        # By default, use the most basic template based on asset type and name
+        destination_template = self.sgtk.templates["unreal_asset_template"]
+        
+        if fields:
+            # Check for project-specific templates that use specific fields
+            if fields["sg_category_3"] is not None:
+                destination_template = self.sgtk.templates["unreal_asset_3_categories"]
+            elif fields["sg_category_2"] is not None:
+                destination_template = self.sgtk.templates["unreal_asset_2_categories"]
+            elif fields["sg_category_1"] is not None:
+                destination_template = self.sgtk.templates["unreal_asset_1_category"]
+            elif fields["sg_asset_type"] is None:
+            # Case of asset with no type
+                destination_template = self.sgtk.templates["unreal_asset_notype"]
+        else:
+            # fields is empty in the case of the project context, which indicates
+            # that we are trying to load a published file not linked to any task or asset
+            # In that case, use the published file template
+            destination_template = self.sgtk.templates["unreal_published_file"]
+            
+            # Derive the destination name from the published file name without the extension
+            name = sg_publish_data["code"]
+            name = os.path.splitext(name)[0]
+            unreal.log("Published file name: {}".format(name))
+            
+            # Add it as sg_asset_name in fields to apply it to the template
+            fields["sg_asset_name"] = name
+        
+        unreal.log("Selected destination template: {}".format(destination_template))
+        destination_path = destination_template.apply_fields(fields)
+        unreal.log("Destination path after applying fields: {}".format(destination_path))
+        
+        destination_name = None
+        if "sg_asset_name" in fields:
+            destination_name = fields["sg_asset_name"]
+            
+        return destination_path, destination_name
+        
+"""
+Functions to import FBX into Unreal
+"""
+
+def _unreal_import_fbx_asset(input_path, destination_path, destination_name):
+    """
+    Import an FBX into Unreal Content Browser
+
+    :param input_path: The fbx file to import
+    :param destination_path: The Content Browser path where the asset will be placed
+    :param destination_name: The asset name to use; if None, will use the filename without extension
+    """
+    tasks = []
+    tasks.append(_generate_fbx_import_task(input_path, destination_path, destination_name))
+    
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+    
+    unreal.EditorLoadingAndSavingUtils.save_dirty_packages(False, True)
+    
+    for task in tasks:
+        unreal.log("Import Task for: {}".format(task.filename))
+        for object_path in task.imported_object_paths:
+            unreal.log("Imported object: {}".format(object_path))
+        
+def _generate_fbx_import_task(filename, destination_path, destination_name=None, replace_existing=True,
+                             automated=True, save=True, materials=True,
+                             textures=True, as_skeletal=False):
+    """
+    Create and configure an Unreal AssetImportTask
+
+    :param filename: The fbx file to import
+    :param destination_path: The Content Browser path where the asset will be placed
+    :return the configured AssetImportTask
+    """
+    task = unreal.AssetImportTask()
+    task.filename = filename
+    task.destination_path = destination_path
+    
+    # By default, destination_name is the filename without the extension
+    if destination_name is not None:
+        task.destination_name = destination_name
+        
+    task.replace_existing = replace_existing
+    task.automated = automated
+    task.save = save
+
+    task.options = unreal.FbxImportUI()
+    task.options.import_materials = materials
+    task.options.import_textures = textures
+    task.options.import_as_skeletal = as_skeletal
+    # task.options.static_mesh_import_data.combine_meshes = True
+
+    task.options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
+    if as_skeletal:
+        task.options.mesh_type_to_import = unreal.FBXImportType.FBXIT_SKELETAL_MESH
+
+    return task

@@ -124,9 +124,7 @@ class UnrealEditorEngine(Engine):
             unreal.log("Created QApplication instance: {0}".format(self._qt_app))
 
             def _app_tick(dt):
-                # Threading issues cause instability with the next line; to be investigated further
-                # QtWidgets.QApplication.processEvents()
-                pass
+                QtWidgets.QApplication.processEvents()
             
             tick_handle = unreal.register_slate_post_tick_callback(_app_tick)
 

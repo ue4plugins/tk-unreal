@@ -75,7 +75,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         if _engine is not None:
             unreal.log("Shutting down ShotgunEngineWrapper")
             _engine.destroy()
-            _engine._qt_app.quit()
+            QtWidgets.QApplication.instance().quit()
             QtWidgets.QApplication.processEvents()
         
     """
