@@ -1,13 +1,3 @@
-# Copyright (c) 2018 Shotgun Software Inc.
-#
-# CONFIDENTIAL AND PROPRIETARY
-#
-# This work is provided "AS IS" and subject to the Shotgun Pipeline Toolkit
-# Source Code License included in this distribution package. See LICENSE.
-# By accessing, using, copying or modifying this work you indicate your
-# agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
-# not expressly granted therein are reserved by Shotgun Software Inc.
-
 # Metadata defining the behaviour and requirements for this engine
 
 # expected fields in the configuration file for this engine
@@ -42,4 +32,7 @@ description: "Shotgun Integration in Unreal Editor"
 # Required minimum versions for this item to run
 requires_shotgun_version:
 requires_core_version: "v0.18.8"
+
+frameworks:
+    - {"name": "tk-framework-unrealqt", "version": "v1.x.x"}
 

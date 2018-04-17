@@ -56,21 +56,6 @@ class EngineLauncher(SoftwareLauncher):
         # Signals which engine instance from the environment is going to be used.
         required_env["SHOTGUN_ENGINE"] = self.engine_name
 
-        # Tell the toolkit which PySide2 to use by adding the Unreal PySide2 to PYTHONPATH
-        # This seems to be optional 
-
-        # Extract the Unreal root path from the executable path by removing the last 3 parts
-        # of the path which correspond to Binaries\\Win64\\UE4Editor.exe
-        split_exec_path = exec_path.split(os.sep)
-        exec_path_drive = split_exec_path[0]
-        split_exec_path = exec_path.split(os.sep)[1:-3]
-        
-        unreal_root = exec_path_drive + os.sep
-        unreal_root = os.path.join(unreal_root, *split_exec_path)
-        pyside2_location = os.path.join(unreal_root, "Source", "ThirdParty", "Python", "Win64", "Lib", "site-packages", "PySide2")
-        pythonpath = self._join_paths_with_existing_env_paths("PYTHONPATH", pyside2_location)
-        required_env["PYTHONPATH"] = pythonpath
-
         # TODO: Get the startup project from settings somewhere, for now hardcoded
         # Otherwise, leave it empty and the project selection window will appear
         # (the command-line arguments are forwarded to the new instance of Unreal Editor)

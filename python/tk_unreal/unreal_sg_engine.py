@@ -1,6 +1,5 @@
 import unreal
 import sgtk.platform
-from PySide2 import QtCore, QtWidgets, QtGui
 
 unreal.log("Loading Shotgun Engine for Unreal")
 
@@ -53,6 +52,8 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         unreal.log("{0} _execute_deferred called with {1}".format(self, callback.__str__()))
         self._callback = callback
+        
+        from sgtk.platform.qt5 import QtCore
         QtCore.QTimer.singleShot(0, self._execute_within_exception_trap)
 
     def _execute_within_exception_trap(self):
@@ -71,6 +72,8 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                 
     @unreal.ufunction(override=True)
     def shutdown(self):
+        from sgtk.platform.qt5 import QtWidgets
+
         _engine = sgtk.platform.current_engine()
         if _engine is not None:
             unreal.log("Shutting down ShotgunEngineWrapper")
@@ -181,6 +184,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         Callback to Jump to Shotgun from context
         """
+        from sgtk.platform.qt5 import QtGui, QtCore
         url = self._engine.context.shotgun_url
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
