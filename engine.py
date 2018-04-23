@@ -13,6 +13,7 @@ from sgtk.platform import Engine
 import sgtk.platform
 
 import unreal
+import os
 import sys
 
 ###############################################################################################
@@ -99,7 +100,7 @@ class UnrealEditorEngine(Engine):
         """
         Initializes the engine.
         """
-        self.logger.debug("%s: Initializing...", self)
+        self.logger.debug("%s: Initializing UnrealEditorEngine from %s...", self, __file__)
 
         # If your launcher allows to launch any version of Unreal, this is where you would usually
         # show a Qt dialog warning that this version of the tk-unreal engine might not be compatible
@@ -112,6 +113,7 @@ class UnrealEditorEngine(Engine):
         
         if not QtWidgets.QApplication.instance():
             self._qt_app = QtWidgets.QApplication(sys.argv)
+            self._qt_app.setQuitOnLastWindowClosed(False)
             unreal.log("Created QApplication instance: {0}".format(self._qt_app))
 
             def _app_tick(dt):
@@ -121,9 +123,14 @@ class UnrealEditorEngine(Engine):
 
             def _app_quit():
                 unreal.unregister_slate_post_tick_callback(tick_handle)
-                
+
             QtWidgets.QApplication.instance().aboutToQuit.connect(_app_quit)
-    
+        else:
+            self._qt_app = QtWidgets.QApplication.instance()
+
+        # Make the QApplication use the dark theme. Must be called after the QApplication is instantiated
+        self._initialize_dark_look_and_feel()
+            
     def post_app_init(self):
         """
         Called when all apps have initialized
@@ -234,6 +241,22 @@ class UnrealEditorEngine(Engine):
 
         return None
 
+    def _create_dialog(self, title, bundle, widget, parent):
+        """
+        Function override to set the window icon
+        """
+        dialog = sgtk.platform.Engine._create_dialog(self, title, bundle, widget, parent)
+        
+        from sgtk.platform.qt import QtGui
+
+        unreal_icon = os.path.realpath(os.path.join(
+            os.path.dirname(__file__),
+            "icon_256.png"))
+            
+        dialog.setWindowIcon(QtGui.QIcon(unreal_icon))
+
+        return dialog
+        
     def _define_qt_base(self):
         """
         This will be called at initialisation time and will allow
