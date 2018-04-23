@@ -62,10 +62,9 @@ class EngineLauncher(SoftwareLauncher):
         unreal_project = ""
         args = args + unreal_project
         
-        # Auto-execute the bootstrap at engine launch
+        # Set the bootstrap location in the environment variable that will be used by the Unreal Shotgun startup script
         bootstrap_script = os.path.join(self.disk_location, "plugins", "basic", "bootstrap.py")
-        exec_cmd = " -ExecCmds=\"py {0}\"".format(bootstrap_script)
-        args = args + exec_cmd
+        required_env["UE_SHOTGUN_BOOTSTRAP"] = bootstrap_script
         
         self.logger.debug("Executable path: %s", exec_path)
         self.logger.debug("Launch environment: %s", pprint.pformat(required_env))
