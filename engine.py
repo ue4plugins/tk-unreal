@@ -36,6 +36,8 @@ class UnrealEditorEngine(Engine):
     It all uses the Python's logger under the hood.
     """
 
+    metadata_tag_prefix = "SG."
+    
     def __init__(self, *args, **kwargs):
         """
         Engine Constructor
@@ -217,6 +219,12 @@ class UnrealEditorEngine(Engine):
 
         # This is where you would destroy the menu and panel.
 
+    def get_metadata_tag(self, tag):
+        """
+        Returns the given tag with the metadata tag prefix defined for this engine
+        """
+        return UnrealEditorEngine.metadata_tag_prefix + tag
+        
     def _get_dialog_parent(self):
         """
         Get the QWidget parent for all dialogs created through

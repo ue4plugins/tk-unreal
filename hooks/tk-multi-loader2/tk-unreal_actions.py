@@ -148,8 +148,69 @@ class UnrealActions(HookBaseClass):
 
         destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
         
-        _unreal_import_fbx_asset(path, destination_path, destination_name)
+        asset_path = _unreal_import_fbx_asset(path, destination_path, destination_name)
+        
+        if asset_path:
+            self._set_asset_metadata(asset_path, sg_publish_data)
+            
+            # Focus the Unreal Content Browser on the imported asset
+            asset_paths = []
+            asset_paths.append(asset_path)
+            unreal.EditorAssetLibrary.sync_browser_to_objects(asset_paths)
+        
+    def _set_asset_metadata(self, asset_path, sg_publish_data):
+        """
+        Set needed metadata on the given asset
+        """
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
 
+        if not asset:
+            return
+            
+        engine = sgtk.platform.current_engine()
+        
+        # Add a metadata tag for "created_by"
+        if "created_by" in sg_publish_data:
+            createdby_dict = sg_publish_data["created_by"]
+            name = ""
+            if "name" in createdby_dict:
+                name = createdby_dict["name"]
+            elif "id" in createdby_dict:
+                name = createdby_dict["id"]
+            
+            tag = engine.get_metadata_tag("created_by")
+            unreal.EditorAssetLibrary.set_metadata_tag(asset, tag, name)
+
+        # Add a metadata tag for the Shotgun URL
+        # Construct the PublishedFile URL from the publish data type and id since 
+        # the context of a PublishedFile is the Project context
+        shotgun_site = self.sgtk.shotgun_url
+        type = sg_publish_data["type"]
+        id = sg_publish_data["id"]
+        url = shotgun_site + "/detail/" + type + "/" + str(id)
+
+        """
+        # Get the URL from the context (Asset, Task, Project)
+        # The context of the publish data is usually the Task (or Project if there's no task)
+        # But try to be more specific by using the context of the linked entity (Asset)
+        entity_dict = sg_publish_data["entity"]
+        context = self.sgtk.context_from_entity_dictionary(entity_dict)
+        url = context.shotgun_url
+        
+        if entity_dict["type"] == "Project":
+            # As a last resort, construct the PublishedFile URL from the publish data type and id since 
+            # the context of a PublishedFile is the Project context
+            shotgun_site = self.sgtk.shotgun_url
+            type = sg_publish_data["type"]
+            id = sg_publish_data["id"]
+            url = shotgun_site + "/detail/" + type + "/" + str(id)
+        """
+        
+        tag = engine.get_metadata_tag("url")
+        unreal.EditorAssetLibrary.set_metadata_tag(asset, tag, url)
+
+        unreal.EditorAssetLibrary.save_loaded_asset(asset)
+            
     ##############################################################################################################
     # helper methods which can be subclassed in custom hooks to fine tune the behaviour of things
         
@@ -227,13 +288,17 @@ def _unreal_import_fbx_asset(input_path, destination_path, destination_name):
     tasks.append(_generate_fbx_import_task(input_path, destination_path, destination_name))
     
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
-    
-    unreal.EditorLoadingAndSavingUtils.save_dirty_packages(False, True)
+
+    first_imported_object = None
     
     for task in tasks:
         unreal.log("Import Task for: {}".format(task.filename))
         for object_path in task.imported_object_paths:
             unreal.log("Imported object: {}".format(object_path))
+            if not first_imported_object:
+                first_imported_object = object_path
+
+    return first_imported_object
         
 def _generate_fbx_import_task(filename, destination_path, destination_name=None, replace_existing=True,
                              automated=True, save=True, materials=True,

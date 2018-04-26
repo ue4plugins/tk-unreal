@@ -185,7 +185,31 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         Callback to Jump to Shotgun from context
         """
         from sgtk.platform.qt5 import QtGui, QtCore
+        
+        # By default, use the Shotgun project URL
         url = self._engine.context.shotgun_url
+        
+        # If there's a selected actor or asset, try to use the url metadata from it if available
+        # For multi-selection, use the first object in the list
+        selected_asset = self.selected_assets[0] if self.selected_assets else None
+        selected_actor = self.selected_actors[0] if self.selected_actors else None
+        
+        loaded_asset = None
+        if selected_asset:
+            unreal.log("Jump to SG for selected asset: {0}".format(selected_asset))
+            loaded_asset = unreal.EditorAssetLibrary.load_asset(selected_asset.object_path)
+        elif selected_actor:
+            # Get the asset that is associated with the selected actor
+            unreal.log("Jump to SG for selected actor: {0}".format(selected_actor))
+            assets = self.get_referenced_assets(selected_actor)
+            loaded_asset = assets[0] if assets else None
+
+        if loaded_asset:
+            tag = self._engine.get_metadata_tag("url")
+            metadata_value = unreal.EditorAssetLibrary.get_metadata_tag(loaded_asset, tag)
+            if metadata_value:
+                url = metadata_value
+            
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
     def _jump_to_fs(self):
