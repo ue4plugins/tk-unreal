@@ -34,9 +34,90 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
             if command_name in self._engine.commands:
                 unreal.log("execute_command: Command {0} found.".format(command_name))
                 command = self._engine.commands[command_name]
-                self._execute_callback(command["callback"])
+                command_callback = command["callback"]
+                command_callback = self._get_command_override(command_name, command_callback)
+                
+                self._execute_callback(command_callback)
                 # self._execute_deferred(command["callback"])
 
+    def _get_command_override(self, command_name, default_callback):
+        """
+        Get overriden callback for the given command or the default callback if it's not overriden
+        Implement command overrides here as needed
+        :param command_name: The command name to override
+        :param default_callback: The callback to use when there's no override
+        """
+        # Override the Shotgun Panel command to use the Shotgun Entity context
+        # and also reuse the dialog if one already exists
+        if command_name == "Shotgun Panel...":
+            def show_shotgunpanel_with_context():
+                app = self._engine.apps["tk-multi-shotgunpanel"]
+                entity_type, entity_id = self._get_context()
+                if entity_type:
+                    return lambda : app.navigate(entity_type, entity_id, app.DIALOG)
+                else:
+                    return default_callback
+            
+            return show_shotgunpanel_with_context()
+            
+        return default_callback
+    
+    def _get_context_url(self):
+        """
+        Get the Shotgun entity URL from the metadata of the selected asset, if present
+        """
+        # By default, use the URL of the project
+        url = self._engine.context.shotgun_url
+
+        # In case of multi-selection, use the first object in the list
+        selected_asset = self.selected_assets[0] if self.selected_assets else None
+        selected_actor = self.selected_actors[0] if self.selected_actors else None
+        
+        loaded_asset = None
+        if selected_asset:
+            # Asset must be loaded to read the metadata from item
+            # Note that right-clicking on an asset in the Unreal Content Browser already loads item
+            # But a load could be triggered if the context is from a selected actor
+            loaded_asset = unreal.EditorAssetLibrary.load_asset(selected_asset.object_path)
+        elif selected_actor:
+            # Get the asset that is associated with the selected actor
+            assets = self.get_referenced_assets(selected_actor)
+            loaded_asset = assets[0] if assets else None
+
+        if loaded_asset:
+            # Try to get the URL metadata from the asset
+            tag = self._engine.get_metadata_tag("url")
+            metadata_value = unreal.EditorAssetLibrary.get_metadata_tag(loaded_asset, tag)
+            if metadata_value:
+                url = metadata_value
+                
+        return url
+
+    def _get_context(self):
+        """
+        Get the Shotgun context (entity type and id) that is associated with the selected menu command
+        """
+        entity_type = None
+        entity_id = None
+
+        # The context is derived from the Shotgun entity URL
+        url = self._get_context_url()
+        if url:
+            # Extract entity type and id from URL, which should follow this pattern:
+            # url = shotgun_site + "/detail/" + entity_type + "/" + entity_id
+            tokens = url.split("/")
+            if len(tokens) > 3:
+                if tokens[-3] == "detail":
+                    entity_type = tokens[-2]
+                    try:
+                        # Entity id must be converted to an integer
+                        entity_id = int(tokens[-1])
+                    except:
+                        # Otherwise, the context cannot be derived from the URL
+                        entity_type = None
+                    
+        return entity_type, entity_id
+        
     def _execute_callback(self, callback):
         """
         Execute the callback right away
@@ -185,31 +266,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         Callback to Jump to Shotgun from context
         """
         from sgtk.platform.qt5 import QtGui, QtCore
-        
-        # By default, use the Shotgun project URL
-        url = self._engine.context.shotgun_url
-        
-        # If there's a selected actor or asset, try to use the url metadata from it if available
-        # For multi-selection, use the first object in the list
-        selected_asset = self.selected_assets[0] if self.selected_assets else None
-        selected_actor = self.selected_actors[0] if self.selected_actors else None
-        
-        loaded_asset = None
-        if selected_asset:
-            unreal.log("Jump to SG for selected asset: {0}".format(selected_asset))
-            loaded_asset = unreal.EditorAssetLibrary.load_asset(selected_asset.object_path)
-        elif selected_actor:
-            # Get the asset that is associated with the selected actor
-            unreal.log("Jump to SG for selected actor: {0}".format(selected_actor))
-            assets = self.get_referenced_assets(selected_actor)
-            loaded_asset = assets[0] if assets else None
-
-        if loaded_asset:
-            tag = self._engine.get_metadata_tag("url")
-            metadata_value = unreal.EditorAssetLibrary.get_metadata_tag(loaded_asset, tag)
-            if metadata_value:
-                url = metadata_value
-            
+        url = self._get_context_url()
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
     def _jump_to_fs(self):
