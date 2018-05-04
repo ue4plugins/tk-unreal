@@ -1,11 +1,20 @@
 import unreal
 import sgtk.platform
 
-unreal.log("Loading Shotgun Engine for Unreal")
+unreal.log("Loading Shotgun Engine for Unreal from {}".format(__file__))
 
 @unreal.uclass()
 class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
+    def _post_init(self):
+        """
+        Equivalent to __init__ but will also be called from C++
+        """
+        engine = sgtk.platform.current_engine()
+        engine.unreal_sg_engine = self
+
+        unreal.log("ShotgunEngineWrapper._post_init: unreal_sg_engine {} with tk-unreal {}".format(self, engine))
+        
     @unreal.ufunction(override=True)
     def get_shotgun_menu_items(self):
         """
@@ -13,10 +22,8 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         menu_items = []
         
-        self._engine = sgtk.platform.current_engine()
-
-        if self._engine is not None:
-            menu_items = self.create_menu()
+        engine = sgtk.platform.current_engine()
+        menu_items = self.create_menu(engine)
 
         unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
 
@@ -27,20 +34,19 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         Callback to execute the menu item selected in the Shotgun menu in Unreal
         """
-        self._engine = sgtk.platform.current_engine()
+        engine = sgtk.platform.current_engine()
 
-        if self._engine is not None:
-            unreal.log("execute_command called for {0}".format(command_name))
-            if command_name in self._engine.commands:
-                unreal.log("execute_command: Command {0} found.".format(command_name))
-                command = self._engine.commands[command_name]
-                command_callback = command["callback"]
-                command_callback = self._get_command_override(command_name, command_callback)
-                
-                self._execute_callback(command_callback)
-                # self._execute_deferred(command["callback"])
+        unreal.log("execute_command called for {0}".format(command_name))
+        if command_name in engine.commands:
+            unreal.log("execute_command: Command {0} found.".format(command_name))
+            command = engine.commands[command_name]
+            command_callback = command["callback"]
+            command_callback = self._get_command_override(engine, command_name, command_callback)
+            
+            self._execute_callback(command_callback)
+            # self._execute_deferred(command["callback"])
 
-    def _get_command_override(self, command_name, default_callback):
+    def _get_command_override(self, engine, command_name, default_callback):
         """
         Get overriden callback for the given command or the default callback if it's not overriden
         Implement command overrides here as needed
@@ -51,8 +57,8 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         # and also reuse the dialog if one already exists
         if command_name == "Shotgun Panel...":
             def show_shotgunpanel_with_context():
-                app = self._engine.apps["tk-multi-shotgunpanel"]
-                entity_type, entity_id = self._get_context()
+                app = engine.apps["tk-multi-shotgunpanel"]
+                entity_type, entity_id = self._get_context(engine)
                 if entity_type:
                     return lambda : app.navigate(entity_type, entity_id, app.DIALOG)
                 else:
@@ -62,12 +68,12 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
             
         return default_callback
     
-    def _get_context_url(self):
+    def _get_context_url(self, engine):
         """
         Get the Shotgun entity URL from the metadata of the selected asset, if present
         """
         # By default, use the URL of the project
-        url = self._engine.context.shotgun_url
+        url = engine.context.shotgun_url
 
         # In case of multi-selection, use the first object in the list
         selected_asset = self.selected_assets[0] if self.selected_assets else None
@@ -86,14 +92,14 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
         if loaded_asset:
             # Try to get the URL metadata from the asset
-            tag = self._engine.get_metadata_tag("url")
+            tag = engine.get_metadata_tag("url")
             metadata_value = unreal.EditorAssetLibrary.get_metadata_tag(loaded_asset, tag)
             if metadata_value:
                 url = metadata_value
                 
         return url
 
-    def _get_context(self):
+    def _get_context(self, engine):
         """
         Get the Shotgun context (entity type and id) that is associated with the selected menu command
         """
@@ -101,7 +107,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         entity_id = None
 
         # The context is derived from the Shotgun entity URL
-        url = self._get_context_url()
+        url = self._get_context_url(engine)
         if url:
             # Extract entity type and id from URL, which should follow this pattern:
             # url = shotgun_site + "/detail/" + entity_type + "/" + entity_id
@@ -155,10 +161,10 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
     def shutdown(self):
         from sgtk.platform.qt5 import QtWidgets
 
-        _engine = sgtk.platform.current_engine()
-        if _engine is not None:
+        engine = sgtk.platform.current_engine()
+        if engine is not None:
             unreal.log("Shutting down ShotgunEngineWrapper")
-            _engine.destroy()
+            engine.destroy()
             QtWidgets.QApplication.instance().quit()
             QtWidgets.QApplication.processEvents()
         
@@ -169,18 +175,18 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
     The following functions simply generate a list of available commands that will populate the Shotgun menu in Unreal
     """
 
-    def create_menu(self):
+    def create_menu(self, engine):
         """
         Populate the Shotgun Menu with the available commands
         """
         menu_items = []
 
         # add contextual commands here so that they get enumerated in the next step
-        self._start_contextual_menu(menu_items)
+        self._start_contextual_menu(engine, menu_items)
 
         # enumerate all items and create menu objects for them
         cmd_items = []
-        for (cmd_name, cmd_details) in self._engine.commands.items():
+        for (cmd_name, cmd_details) in engine.commands.items():
             cmd_items.append(AppCommand(cmd_name, cmd_details))
 
         # add the other contextual commands in this section
@@ -192,7 +198,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         self._add_menu_item(menu_items, "context_end")
 
         # now favourites
-        for fav in self._engine.get_setting("menu_favourites", []):
+        for fav in engine.get_setting("menu_favourites", []):
             app_instance_name = fav["app_instance"]
             menu_name = fav["name"]
             # scan through all menu items
@@ -246,20 +252,20 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         menu_item.description = description
         menu_items.append(menu_item)
         
-    def _start_contextual_menu(self, menu_items):
+    def _start_contextual_menu(self, engine, menu_items):
         """
         Starts a menu section for the current context
         """
-        ctx = self._engine.context
+        ctx = engine.context
         ctx_name = str(ctx)
 
         self._add_menu_item(menu_items, "context_begin", ctx_name, ctx_name)
         
-        self._engine.register_command("Jump to Shotgun", self._jump_to_sg, {"type": "context_menu", "short_name": "jump_to_sg"})
+        engine.register_command("Jump to Shotgun", self._jump_to_sg, {"type": "context_menu", "short_name": "jump_to_sg"})
 
         # Add the menu item only when there are some file system locations.
         if ctx.filesystem_locations:
-            self._engine.register_command("Jump to File System", self._jump_to_fs, {"type": "context_menu", "short_name": "jump_to_fs"})
+            engine.register_command("Jump to File System", self._jump_to_fs, {"type": "context_menu", "short_name": "jump_to_fs"})
 
     def _jump_to_sg(self):
         """
@@ -273,8 +279,10 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         Callback to Jump to Filesystem from context
         """
+        engine = sgtk.platform.current_engine()
+
         # launch one window for each location on disk
-        paths = self._engine.context.filesystem_locations
+        paths = engine.context.filesystem_locations
         for disk_location in paths:
             # get the setting
             system = sys.platform
@@ -291,7 +299,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
             exit_code = os.system(cmd)
             if exit_code != 0:
-                self._engine.log_error("Failed to launch '%s'!" % cmd)
+                engine.log_error("Failed to launch '%s'!" % cmd)
 
     def _add_app_menu(self, commands_by_app, menu_items):
         """
