@@ -106,7 +106,7 @@ class UnrealSessionCollector(HookBaseClass):
 
         # Set the project root
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
-        project_root = unreal_sg.get_shotgun_work_path()
+        project_root = unreal_sg.get_shotgun_work_dir()
         
         # Important to convert "/" in path returned by Unreal to "\" for templates to work
         project_root = project_root.replace("/", "\\")
