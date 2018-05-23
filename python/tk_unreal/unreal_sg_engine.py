@@ -164,6 +164,13 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         engine = sgtk.platform.current_engine()
         if engine is not None:
             unreal.log("Shutting down ShotgunEngineWrapper")
+            
+            # Important: Copy the list of dialogs still opened since the call to close() will modify created_qt_dialogs
+            dialogs_still_opened = engine.created_qt_dialogs[:]
+
+            for dialog in dialogs_still_opened:
+                dialog.close()
+                
             engine.destroy()
             QtWidgets.QApplication.instance().quit()
             QtWidgets.QApplication.processEvents()
@@ -272,7 +279,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         Callback to Jump to Shotgun from context
         """
         from sgtk.platform.qt5 import QtGui, QtCore
-        url = self._get_context_url()
+        url = self._get_context_url(sgtk.platform.current_engine())
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
     def _jump_to_fs(self):
