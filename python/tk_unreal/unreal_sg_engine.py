@@ -165,12 +165,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         if engine is not None:
             unreal.log("Shutting down ShotgunEngineWrapper")
             
-            # Important: Copy the list of dialogs still opened since the call to close() will modify created_qt_dialogs
-            dialogs_still_opened = engine.created_qt_dialogs[:]
-
-            for dialog in dialogs_still_opened:
-                dialog.close()
-                
+            # destroy_engine of tk-unreal will take care of closing all dialogs that are still opened
             engine.destroy()
             QtWidgets.QApplication.instance().quit()
             QtWidgets.QApplication.processEvents()
