@@ -16,6 +16,7 @@ import pprint
 import os
 import sgtk
 import unreal
+import re
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -255,12 +256,20 @@ class UnrealActions(HookBaseClass):
             destination_template = self.sgtk.templates["unreal_published_file"]
             
             # Derive the destination name from the published file name without the extension
-            name = sg_publish_data["code"]
+            # Use publish name from "code" property, fallback to "name" in "path" if there
+            if "code" in sg_publish_data:
+                name = sg_publish_data["code"]
+            elif "path" in sg_publish_data and "name" in sg_publish_data["path"]:
+                name = sg_publish_data["path"]["name"]
+                
             name = os.path.splitext(name)[0]
             unreal.log("Published file name: {}".format(name))
             
             # Add it as sg_asset_name in fields to apply it to the template
             fields["sg_asset_name"] = name
+        
+        if "sg_asset_name" in fields:
+            fields["sg_asset_name"] = _sanitize_name(fields["sg_asset_name"])
         
         unreal.log("Selected destination template: {}".format(destination_template))
         destination_path = destination_template.apply_fields(fields)
@@ -275,6 +284,13 @@ class UnrealActions(HookBaseClass):
 """
 Functions to import FBX into Unreal
 """
+
+def _sanitize_name(name):
+    # Remove the default Shotgun versioning number if found (of the form '.v001')
+    name_no_version = re.sub(r'.v[0-9]{3}', '', name)
+    
+    # Replace any remaining '.' with '_' since they are not allowed in Unreal asset names
+    return name_no_version.replace('.', '_')
 
 def _unreal_import_fbx_asset(input_path, destination_path, destination_name):
     """
