@@ -225,14 +225,23 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # Try to render the sequence
         world_name = unreal_map.get_name()
-        movie_name = "{}-{}".format(world_name, asset_name)
+        
+        # Add a version number to the name, incremented from the current asset version
+        version_number = self._unreal_asset_get_version(asset_path)
+        version_number = version_number + 1
+
+        # Name must match the work/publish templates
+        movie_name = "{}-{}.v{:03d}".format(world_name, asset_name, version_number)
         succeeded, output_filepath = self._unreal_render_sequence_to_movie(destination_path, unreal_map_path, asset_path, movie_name)
         
         if not succeeded:
             return False
 
+        self._unreal_asset_set_version(asset_path, version_number)
+        
         item.properties["path"] = output_filepath.replace("/", "\\")
         item.properties["publish_name"] = movie_name
+        item.properties["version_number"] = version_number
             
         return True
 
@@ -347,7 +356,41 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             return item.context.project
         else:
             return None
+
+    def _unreal_asset_get_version(self, asset_path):
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+        version = 0
+        
+        if not asset:
+            return version
             
+        engine = sgtk.platform.current_engine()
+        tag = engine.get_metadata_tag("version")
+        
+        metadata = unreal.EditorAssetLibrary.get_metadata_tag(asset, tag)
+        
+        if not metadata:
+            return version
+        
+        try:
+            version = int(metadata)
+        except ValueError:
+            pass
+            
+        return version
+
+    def _unreal_asset_set_version(self, asset_path, version_number):
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+        
+        if not asset:
+            return
+            
+        engine = sgtk.platform.current_engine()
+        tag = engine.get_metadata_tag("version")
+        
+        unreal.EditorAssetLibrary.set_metadata_tag(asset, tag, str(version_number))
+        unreal.EditorAssetLibrary.save_loaded_asset(asset)
+        
     def _unreal_render_sequence_to_movie(self, destination_path, unreal_map_path, sequence_path, movie_name):
         """
         Renders a given sequence in a given level to a movie file
