@@ -449,7 +449,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         cmdline_args.append("-ForceRes")
         cmdline_args.append("-Windowed")
         cmdline_args.append("-MovieCinematicMode=yes")
-        cmdline_args.append("-MovieFormat=Movie")
+        cmdline_args.append("-MovieFormat=Video")
         cmdline_args.append("-MovieFrameRate=24")
         cmdline_args.append("-MovieQuality=75")
         cmdline_args.append("-NoTextureStreaming")
