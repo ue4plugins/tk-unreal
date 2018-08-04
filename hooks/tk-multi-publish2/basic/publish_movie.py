@@ -363,25 +363,25 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
     def _unreal_asset_get_version(self, asset_path):
         asset = unreal.EditorAssetLibrary.load_asset(asset_path)
-        version = 0
+        version_number = 0
         
         if not asset:
-            return version
+            return version_number
             
         engine = sgtk.platform.current_engine()
-        tag = engine.get_metadata_tag("version")
+        tag = engine.get_metadata_tag("version_number")
         
         metadata = unreal.EditorAssetLibrary.get_metadata_tag(asset, tag)
         
         if not metadata:
-            return version
+            return version_number
         
         try:
-            version = int(metadata)
+            version_number = int(metadata)
         except ValueError:
             pass
             
-        return version
+        return version_number
 
     def _unreal_asset_set_version(self, asset_path, version_number):
         asset = unreal.EditorAssetLibrary.load_asset(asset_path)
@@ -390,7 +390,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             return
             
         engine = sgtk.platform.current_engine()
-        tag = engine.get_metadata_tag("version")
+        tag = engine.get_metadata_tag("version_number")
         
         unreal.EditorAssetLibrary.set_metadata_tag(asset, tag, str(version_number))
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
