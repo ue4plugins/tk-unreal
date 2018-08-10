@@ -219,60 +219,55 @@ class UnrealActions(HookBaseClass):
         # Enable if needed while in development
         # self.sgtk.reload_templates()
 
-        # Get the publish context which should be for an asset, task or project
+        # Get the publish context to determine the template to use
         context = self.sgtk.context_from_entity_dictionary(sg_publish_data)
-        # unreal.log("Publish data Context: {}".format(context))
 
-        # Query the fields that will be applied to templates
-        # We will select a template that matches the fields available
-        query_template = self.sgtk.templates["unreal_fields_query"]
-        fields = context.as_template_fields(query_template)
-        unreal.log("Template fields: {}".format(fields))
-
-        # By default, use the most basic template based on asset type and name
-        destination_template = self.sgtk.templates["unreal_asset_template"]
-        
-        if fields:
-            # Check for project-specific templates that use specific fields
-            if fields["sg_category_3"] is not None:
-                destination_template = self.sgtk.templates["unreal_asset_3_categories"]
-            elif fields["sg_category_2"] is not None:
-                destination_template = self.sgtk.templates["unreal_asset_2_categories"]
-            elif fields["sg_category_1"] is not None:
-                destination_template = self.sgtk.templates["unreal_asset_1_category"]
-            elif fields["sg_asset_type"] is None:
-            # Case of asset with no type
-                destination_template = self.sgtk.templates["unreal_asset_notype"]
+        # Get the destination templates based on the context
+        # Assets and Shots supported by default
+        # Other entities fall back to Project
+        if context.entity is None:
+            destination_template = self.sgtk.templates["unreal_loader_project_path"]
+            destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
+        elif context.entity["type"] == "Asset":
+            destination_template = self.sgtk.templates["unreal_loader_asset_path"]
+            destination_name_template = self.sgtk.templates["unreal_loader_asset_name"]
+        elif context.entity["type"] == "Shot":
+            destination_template = self.sgtk.templates["unreal_loader_shot_path"]
+            destination_name_template = self.sgtk.templates["unreal_loader_shot_name"]
         else:
-            # fields is empty in the case of the project context, which indicates
-            # that we are trying to load a published file not linked to any task or asset
-            # In that case, use the published file template
-            destination_template = self.sgtk.templates["unreal_published_file"]
-            
-            # Derive the destination name from the published file name without the extension
-            # Use publish name from "code" property, fallback to "name" in "path" if there
-            if "code" in sg_publish_data:
-                name = sg_publish_data["code"]
-            elif "path" in sg_publish_data and "name" in sg_publish_data["path"]:
-                name = sg_publish_data["path"]["name"]
-                
-            name = os.path.splitext(name)[0]
-            unreal.log("Published file name: {}".format(name))
-            
-            # Add it as sg_asset_name in fields to apply it to the template
-            fields["sg_asset_name"] = name
+            destination_template = self.sgtk.templates["unreal_loader_project_path"]
+            destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
+
+        # Get the name field from the Publish Data
+        name = sg_publish_data["name"]
+        name = os.path.splitext(name)[0]
+
+        # Query the fields needed for the destination template from the context
+        fields = context.as_template_fields(destination_template)
+
+        # Add the name field from the publish data
+        fields["name"] = name
         
-        if "sg_asset_name" in fields:
-            fields["sg_asset_name"] = _sanitize_name(fields["sg_asset_name"])
+        # Get destination path by applying fields to destination template
+        # Fall back to the root level if unsuccessful
+        try:
+            destination_path = destination_template.apply_fields(fields)
+        except Exception:
+            destination_path = "/Game/Assets/"
         
-        unreal.log("Selected destination template: {}".format(destination_template))
-        destination_path = destination_template.apply_fields(fields)
-        unreal.log("Destination path after applying fields: {}".format(destination_path))
-        
-        destination_name = None
-        if "sg_asset_name" in fields:
-            destination_name = fields["sg_asset_name"]
-            
+        # Query the fields needed for the name template from the context
+        name_fields = context.as_template_fields(destination_name_template)
+
+        # Add the name field from the publish data
+        name_fields["name"] = name
+
+        # Get destination name by applying fields to the name template
+        # Fall back to the filename if unsuccessful
+        try:
+            destination_name = destination_name_template.apply_fields(name_fields)
+        except Exception:
+            destination_name = _sanitize_name(sg_publish_data["code"])
+
         return destination_path, destination_name
         
 """
