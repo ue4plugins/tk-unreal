@@ -313,7 +313,13 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         :param commands_by_app: Dictionary of app name and commands related to the app, which
                                 will be added to the menu_items
         """
+        has_selection = len(self.selected_assets) > 0 or len(self.selected_actors) > 0
+
         for app_name in sorted(commands_by_app.keys()):
+            # Exclude the Publish app if it doesn't have any context
+            if app_name == "Publish" and not has_selection:
+                continue
+                
             if len(commands_by_app[app_name]) > 1:
                 # more than one menu entry fort his app
                 # make a menu section and put all items in that menu section
