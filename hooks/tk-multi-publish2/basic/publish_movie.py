@@ -395,6 +395,13 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         unreal.EditorAssetLibrary.set_metadata_tag(asset, tag, str(version_number))
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
         
+        # The save will pop up a progress bar that will bring the editor to the front thus hiding the publish app dialog
+        # Workaround: Force all Shotgun dialogs to be brought to front
+        engine = sgtk.platform.current_engine()
+        for dialog in engine.created_qt_dialogs:
+            dialog.raise_()
+
+        
     def _unreal_render_sequence_to_movie(self, destination_path, unreal_map_path, sequence_path, movie_name):
         """
         Renders a given sequence in a given level to a movie file
