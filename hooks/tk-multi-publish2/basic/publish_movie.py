@@ -8,6 +8,7 @@ import unreal
 import pprint
 import subprocess
 import sys
+import datetime
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -35,11 +36,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         contain simple html for formatting.
         """
 
-        return """Publishes the sequence as a rendered movie to Shotgun. A <b>Publish</b> entry will be
-        created in Shotgun which will include a reference to the movie's current
-        path on disk. A <b>Version</b> entry will also be created in Shotgun
-        with the movie file being uploaded there. Other users will be able to
-        review the movie in the browser or in RV."""
+        return """Publishes the sequence as a rendered movie to Shotgun. A 
+        <b>Publish</b> entry will be created in Shotgun which will include a
+        reference to the movie's current path on disk. A <b>Version</b> entry
+        will also be created in Shotgun with the movie file being uploaded 
+        there. Other users will be able to review the movie in the browser or 
+        in RV."""
 
     @property
     def settings(self):
@@ -75,19 +77,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             }
         }
 
-        work_template_setting = {
-            "Work Template": {
-                "type": "template",
-                "default": None,
-                "description": "Template path for rendered movie files. Should"
-                               "correspond to a template defined in "
-                               "templates.yml.",
-            }
-        }
-
         # update the base settings
         base_settings.update(publish_template_setting)
-        base_settings.update(work_template_setting)
 
         return base_settings
 
@@ -130,16 +121,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         
         accepted = True
         publisher = self.parent
-        
-        # ensure a work file template is available in the settings
-        work_template_setting = settings.get("Work Template")
-        work_template = publisher.get_template_by_name(work_template_setting.value)
-        if not work_template:
-            self.logger.debug(
-                "A work template is required for the sequence item in order to "
-                "publish it. Not accepting the item."
-            )
-            accepted = False
 
         # ensure the publish template is defined
         publish_template_setting = settings.get("Publish Template")
@@ -154,7 +135,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # we've validated the work and publish templates. add them to the item properties
         # for use in subsequent methods
         item.properties["publish_template"] = publish_template
-        item.properties["work_template"] = work_template
 
         return {
             "accepted": accepted,
@@ -196,27 +176,27 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             self.logger.debug("Sequence path or name not configured.")
             return False
 
+        # Get the configured publish template
         publish_template = item.properties.get("publish_template")
-        if not publish_template:
-            self.logger.debug("No publish template configured.")
-            return False
+        
+        # Get the context from the Publisher UI
+        context = item.context
+        unreal.log("context: {}".format(context))
 
-        # Get the work template which should have been retrieved from the settings and set on the item
-        work_template = item.properties.get("work_template")
-        if not work_template:
-            self.logger.debug("No work template configured.")
-            return False
-            
-        # Get destination path for rendered movie
-        work_path_fields = {"name" : asset_name}
-        work_path = work_template.apply_fields(work_path_fields)
-        work_path = os.path.normpath(work_path)
-
-        # Remove the filename from the work path
-        destination_path = os.path.split(work_path)[0]
-
-        # Ensure that the destination path exists before rendering the sequence
-        self.parent.ensure_folder_exists(destination_path)
+        # Query the fields needed for the publish template from the context
+        try:
+            fields = context.as_template_fields(publish_template)
+        except Exception:
+            # We likely failed because of folder creation, trigger that
+            self.parent.sgtk.create_filesystem_structure(
+                context.entity["type"],
+                context.entity["id"],
+                self.parent.engine,
+                )
+            # In theory, this should now work because we've created folders and
+            # updated the path cache
+            fields = item.context.as_template_fields(publish_template)
+        unreal.log("context fields: {}".format(fields))
 
         # Ensure that the current map is saved on disk
         unreal_map = unreal.EditorLevelLibrary.get_editor_world()
@@ -227,24 +207,37 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             self.logger.debug("Current map must be saved first.")
             return False
 
-        # Try to render the sequence
+        # Add the map name and level sequence to fields 
         world_name = unreal_map.get_name()
+        fields["world"] = world_name
+        fields["level_sequence"] = asset_name
+
+        # Stash the level sequence and map paths in properties for the render
+        item.properties["unreal_asset_path"] = asset_path
+        item.properties["unreal_map_path"] = unreal_map_path
         
-        # Add a version number to the name, incremented from the current asset version
+        # Add a version number to the fields, incremented from the current asset version
         version_number = self._unreal_asset_get_version(asset_path)
         version_number = version_number + 1
+        fields["version"] = version_number
 
-        # Name must match the work/publish templates
-        movie_name = "{}-{}.v{:03d}".format(world_name, asset_name, version_number)
-        succeeded, output_filepath = self._unreal_render_sequence_to_movie(destination_path, unreal_map_path, asset_path, movie_name)
-        
-        if not succeeded:
-            return False
+        # Add today's date to the fields
+        date = datetime.date.today()
+        fields["YYYY"] = date.year
+        fields["MM"] = date.month
+        fields["DD"] = date.day
 
-        self._unreal_asset_set_version(asset_path, version_number)
+        # ensure the fields work for the publish template
+        missing_keys = publish_template.missing_keys(fields)
+        if missing_keys:
+            error_msg = "Missing keys required for the publish template " \
+                        "%s" % (missing_keys)
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
         
-        item.properties["path"] = output_filepath.replace("/", "\\")
-        item.properties["publish_name"] = movie_name
+        item.properties["path"] = publish_template.apply_fields(fields)
+        item.properties["publish_path"] = item.properties["path"]
+        # item.properties["publish_name"] = movie_name
         item.properties["version_number"] = version_number
             
         return True
@@ -267,9 +260,28 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # are appropriate for current os, no double separators, etc.
         
         # let the base class register the publish
-        # the publish_file will copy the file from the work path to the publish path
-        # if the item is provided with the worK_template and publish_template properties
         
+        publish_path = item.properties.get("path")
+        publish_path = os.path.normpath(publish_path)
+
+        # Split the destination path into folder and filename
+        destination_folder = os.path.split(publish_path)[0]
+        movie_name = os.path.split(publish_path)[1]
+        movie_name = os.path.splitext(movie_name)[0]
+
+        # Ensure that the destination path exists before rendering the sequence
+        self.parent.ensure_folder_exists(destination_folder)
+
+        # Get the level sequence and map paths again
+        unreal_asset_path = item.properties["unreal_asset_path"]
+        unreal_map_path = item.properties["unreal_map_path"]
+        unreal.log("movie name: {}".format(movie_name))
+        # Render the movie
+        self._unreal_render_sequence_to_movie(destination_folder, unreal_map_path, unreal_asset_path, movie_name)
+
+        # Increment the version number
+        self._unreal_asset_set_version(unreal_asset_path, item.properties["version_number"])
+
         # Publish the movie file to Shotgun
         super(UnrealMoviePublishPlugin, self).publish(settings, item)
         
@@ -280,9 +292,10 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         self.logger.info("Creating Version...")
         version_data = {
             "project": item.context.project,
-            "code": publish_name,
+            "code": movie_name,
             "description": item.description,
             "entity": self._get_version_entity(item),
+            "sg_path_to_movie": publish_path,
             "sg_task": item.context.task
         }
 
@@ -314,7 +327,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # On windows, ensure the path is utf-8 encoded to avoid issues with
         # the shotgun api
-        upload_path = item.properties.get("path")
+        upload_path = item.properties.get("publish_path")
+        unreal.log("upload_path: {}".format(upload_path))
         if sys.platform.startswith("win"):
             upload_path = upload_path.decode("utf-8")
 
@@ -341,14 +355,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # do the base class finalization
         super(UnrealMoviePublishPlugin, self).finalize(settings, item)
         
-        # Delete the rendered movie from the work folder
-        file_to_delete = item.properties.get("path")
-        
-        if file_to_delete:
-            try:
-                os.remove(file_to_delete)
-            except OSError, e:
-                pass
+        pass
 
     def _get_version_entity(self, item):
         """
