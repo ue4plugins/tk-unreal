@@ -5,6 +5,7 @@
 import sgtk
 import os
 import unreal
+import datetime
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -116,15 +117,6 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         
         accepted = True
         publisher = self.parent
-        
-        # ensure a work file template is available on the parent item
-        work_template = item.parent.properties.get("work_template")
-        if not work_template:
-            self.logger.debug(
-                "A work template is required for the asset item in order to "
-                "publish it. Not accepting the item."
-            )
-            accepted = False
 
         # ensure the publish template is defined
         publish_template_setting = settings.get("Publish Template")
@@ -139,7 +131,6 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # we've validated the work and publish templates. add them to the item properties
         # for use in subsequent methods
         item.properties["publish_template"] = publish_template
-        item.properties["work_template"] = work_template
 
         return {
             "accepted": accepted,
@@ -186,36 +177,33 @@ class UnrealAssetPublishPlugin(HookBaseClass):
             self.logger.debug("No publish template configured.")
             return False
 
-        # Get the work template which should have been retrieve by the collector and set on the item
-        work_template = item.properties.get("work_template")
-        if not work_template:
-            self.logger.debug("No work template configured.")
-            return False
-            
-        # Get destination path for exported FBX from work template
-        # which should be project root + work template
-        work_path_fields = {"name" : asset_name}
-        work_path = work_template.apply_fields(work_path_fields)
-        work_path = os.path.normpath(work_path)
+        # Add the Unreal asset name to the fields
+        fields = {"name" : asset_name}
+
+        # Add today's date to the fields
+        date = datetime.date.today()
+        fields["YYYY"] = date.year
+        fields["MM"] = date.month
+        fields["DD"] = date.day
+
+        # Stash the Unrea asset path and name in properties
+        item.properties["asset_path"] = asset_path
+        item.properties["asset_name"] = asset_name
+
+        # Get destination path for exported FBX from publish template
+        # which should be project root + publish template
+        publish_path = publish_template.apply_fields(fields)
+        publish_path = os.path.normpath(publish_path)
+        item.properties["path"] = publish_path
 
         # Remove the filename from the work path
-        destination_path = os.path.split(work_path)[0]
+        destination_path = os.path.split(publish_path)[0]
 
-        # Ensure that the destination path exists before exporting since the FBX exporter doesn't check that
-        publisher = self.parent
-        publisher.ensure_folder_exists(destination_path)
+        # Stash the destination path in properties
+        item.properties["destination_path"] = destination_path
 
-        # Export the asset from Unreal
-        result, item_path = _unreal_export_asset_to_fbx(destination_path, asset_path, asset_name)
-
-        if not result:
-            self.logger.debug("Asset %s cannot be exported to FBX." % (asset_path))
-            return False
-
-        # Set the path of the item
-        # Path must match the pattern of the work template for the publish_file plugin to work
-        item_path = item_path.replace("/", "\\")
-        item.properties["path"] = item_path
+        # Set the Published File Type
+        item.properties["publish_type"] = "Unreal FBX"
 
         # run the base class validation
         # return super(UnrealAssetPublishPlugin, self).validate(settings, item)
@@ -238,6 +226,19 @@ class UnrealAssetPublishPlugin(HookBaseClass):
 
         # get the path in a normalized state. no trailing separator, separators
         # are appropriate for current os, no double separators, etc.
+
+        # Ensure that the destination path exists before exporting since the
+        # Unreal FBX exporter doesn't check that
+        destination_path = item.properties["destination_path"]
+        self.parent.ensure_folder_exists(destination_path)
+
+        # Export the asset from Unreal
+        asset_path = item.properties["asset_path"]
+        asset_name = item.properties["asset_name"]
+        try:
+            _unreal_export_asset_to_fbx(destination_path, asset_path, asset_name)
+        except Exception:
+            self.logger.debug("Asset %s cannot be exported to FBX." % (asset_path))
         
         # let the base class register the publish
         # the publish_file will copy the file from the work path to the publish path

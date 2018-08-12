@@ -237,7 +237,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         
         item.properties["path"] = publish_template.apply_fields(fields)
         item.properties["publish_path"] = item.properties["path"]
-        # item.properties["publish_name"] = movie_name
+        item.properties["publish_type"] = "Unreal Render"
         item.properties["version_number"] = version_number
             
         return True
