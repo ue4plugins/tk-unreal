@@ -4,6 +4,7 @@
 
 import unreal
 import sgtk.platform
+import config
 
 unreal.log("Loading Shotgun Engine for Unreal from {}".format(__file__))
 
@@ -14,10 +15,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         Equivalent to __init__ but will also be called from C++
         """
-        engine = sgtk.platform.current_engine()
-        engine.unreal_sg_engine = self
-
-        unreal.log("ShotgunEngineWrapper._post_init: unreal_sg_engine {} with tk-unreal {}".format(self, engine))
+        config.wrapper_instance = self
         
     @unreal.ufunction(override=True)
     def get_shotgun_menu_items(self):
