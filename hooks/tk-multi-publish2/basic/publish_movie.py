@@ -191,7 +191,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             self.parent.sgtk.create_filesystem_structure(
                 context.entity["type"],
                 context.entity["id"],
-                self.parent.engine,
+                self.parent.engine.instance_name
                 )
             # In theory, this should now work because we've created folders and
             # updated the path cache
