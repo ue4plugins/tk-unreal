@@ -5,6 +5,8 @@
 import unreal
 import sgtk.platform
 import config
+import sys
+import os
 
 unreal.log("Loading Shotgun Engine for Unreal from {}".format(__file__))
 
