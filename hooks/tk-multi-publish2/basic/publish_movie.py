@@ -327,10 +327,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # On windows, ensure the path is utf-8 encoded to avoid issues with
         # the shotgun api
-        upload_path = item.properties.get("publish_path")
+        upload_path = str(item.properties.get("publish_path"))
         unreal.log("upload_path: {}".format(upload_path))
-        if sys.platform.startswith("win"):
-            upload_path = upload_path.decode("utf-8")
 
         # Upload the file to SG
         self.logger.info("Uploading content...")
@@ -429,7 +427,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             # Must delete it first, otherwise the Sequencer will add a number in the filename
             try:
                 os.remove(output_filepath)
-            except OSError, e:
+            except OSError as e:
                 self.logger.debug("Couldn't delete {}. The Sequencer won't be able to output the movie to that file.".format(output_filepath))
                 return False, None
 

@@ -124,16 +124,6 @@ class UnrealEditorEngine(Engine):
             self._qt_app = QtWidgets.QApplication(sys.argv)
             self._qt_app.setQuitOnLastWindowClosed(False)
             unreal.log("Created QApplication instance: {0}".format(self._qt_app))
-
-            def _app_tick(dt):
-                QtWidgets.QApplication.processEvents()
-            
-            tick_handle = unreal.register_slate_post_tick_callback(_app_tick)
-
-            def _app_quit():
-                unreal.unregister_slate_post_tick_callback(tick_handle)
-
-            QtWidgets.QApplication.instance().aboutToQuit.connect(_app_quit)
         else:
             self._qt_app = QtWidgets.QApplication.instance()
 

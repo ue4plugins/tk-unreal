@@ -200,7 +200,10 @@ def _get_installation_paths_from_registry(logger):
 
     :returns: List of paths where Unreal is installed
     """
-    import _winreg
+    try:
+        import _winreg
+    except ImportError:
+        import winreg as _winreg
     logger.debug("Querying windows registry for key HKEY_LOCAL_MACHINE\\SOFTWARE\\EpicGames\\Unreal Engine")
 
     base_key_name = "SOFTWARE\\EpicGames\\Unreal Engine"
@@ -241,7 +244,10 @@ def _get_development_builds_paths_from_registry(logger):
 
     :returns: List of paths where Unreal executable is found
     """
-    import _winreg
+    try:
+        import _winreg
+    except ImportError:
+        import winreg as _winreg
     logger.debug("Querying windows registry for key HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds")
 
     base_key_name = "SOFTWARE\\Epic Games\\Unreal Engine\\Builds"

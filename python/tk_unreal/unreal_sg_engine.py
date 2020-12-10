@@ -4,7 +4,7 @@
 
 import unreal
 import sgtk.platform
-import config
+from . import config
 import sys
 import os
 
@@ -81,7 +81,11 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
         # In case of multi-selection, use the first object in the list
         selected_asset = self.selected_assets[0] if self.selected_assets else None
-        selected_actor = self.selected_actors[0] if self.selected_actors else None
+        try:
+            selected_actors = self.get_selected_actors()
+        except:
+            selected_actors = self.selected_actors
+        selected_actor = selected_actors[0] if selected_actors else None
         
         loaded_asset = None
         if selected_asset:
@@ -156,7 +160,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
             try:
                 unreal.log("_execute_within_exception_trap: trying callback {0}".format(self._callback.__str__()))
                 self._callback()
-            except Exception, e:
+            except Exception as e:
                 current_engine = sgtk.platform.current_engine()
                 current_engine.logger.exception("An exception was raised from Toolkit")
             self._callback = None
@@ -313,8 +317,12 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         :param commands_by_app: Dictionary of app name and commands related to the app, which
                                 will be added to the menu_items
         """
-        has_selection = len(self.selected_assets) > 0 or len(self.selected_actors) > 0
-
+        try:
+            has_selected_actors = len(self.get_selected_actors()) > 0
+        except:
+            has_selected_actors = len(self.selected_actors) > 0
+        has_selection = len(self.selected_assets) > 0 or has_selected_actors
+        
         for app_name in sorted(commands_by_app.keys()):
             # Exclude the Publish app if it doesn't have any context
             if app_name == "Publish" and not has_selection:
