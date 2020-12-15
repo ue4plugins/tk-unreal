@@ -429,7 +429,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             # Must delete it first, otherwise the Sequencer will add a number in the filename
             try:
                 os.remove(output_filepath)
-            except OSError, e:
+            except OSError as e:
                 self.logger.debug("Couldn't delete {}. The Sequencer won't be able to output the movie to that file.".format(output_filepath))
                 return False, None
 

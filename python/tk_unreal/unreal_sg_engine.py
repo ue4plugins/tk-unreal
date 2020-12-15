@@ -4,7 +4,7 @@
 
 import unreal
 import sgtk.platform
-import config
+from . import config
 import sys
 import os
 
@@ -156,7 +156,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
             try:
                 unreal.log("_execute_within_exception_trap: trying callback {0}".format(self._callback.__str__()))
                 self._callback()
-            except Exception, e:
+            except Exception as e:
                 current_engine = sgtk.platform.current_engine()
                 current_engine.logger.exception("An exception was raised from Toolkit")
             self._callback = None
