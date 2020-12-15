@@ -2,4 +2,4 @@
 # This file has been modified by Epic Games, Inc. and is subject to the license 
 # file included in this repository.
 
-import unreal_sg_engine
+from . import unreal_sg_engine
