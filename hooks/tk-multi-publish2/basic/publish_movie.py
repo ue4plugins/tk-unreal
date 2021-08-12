@@ -1,5 +1,5 @@
 # This file is based on templates provided and copyrighted by Autodesk, Inc.
-# This file has been modified by Epic Games, Inc. and is subject to the license 
+# This file has been modified by Epic Games, Inc. and is subject to the license
 # file included in this repository.
 
 import sgtk
@@ -36,11 +36,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         contain simple html for formatting.
         """
 
-        return """Publishes the sequence as a rendered movie to Shotgun. A 
+        return """Publishes the sequence as a rendered movie to Shotgun. A
         <b>Publish</b> entry will be created in Shotgun which will include a
         reference to the movie's current path on disk. A <b>Version</b> entry
-        will also be created in Shotgun with the movie file being uploaded 
-        there. Other users will be able to review the movie in the browser or 
+        will also be created in Shotgun with the movie file being uploaded
+        there. Other users will be able to review the movie in the browser or
         in RV."""
 
     @property
@@ -118,7 +118,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         :returns: dictionary with boolean keys accepted, required and enabled
         """
-        
+
         accepted = True
         publisher = self.parent
 
@@ -178,7 +178,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # Get the configured publish template
         publish_template = item.properties.get("publish_template")
-        
+
         # Get the context from the Publisher UI
         context = item.context
         unreal.log("context: {}".format(context))
@@ -192,7 +192,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 context.entity["type"],
                 context.entity["id"],
                 self.parent.engine.instance_name
-                )
+            )
             # In theory, this should now work because we've created folders and
             # updated the path cache
             fields = item.context.as_template_fields(publish_template)
@@ -207,7 +207,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             self.logger.debug("Current map must be saved first.")
             return False
 
-        # Add the map name and level sequence to fields 
+        # Add the map name and level sequence to fields
         world_name = unreal_map.get_name()
         fields["world"] = world_name
         fields["level_sequence"] = asset_name
@@ -215,7 +215,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # Stash the level sequence and map paths in properties for the render
         item.properties["unreal_asset_path"] = asset_path
         item.properties["unreal_map_path"] = unreal_map_path
-        
+
         # Add a version number to the fields, incremented from the current asset version
         version_number = self._unreal_asset_get_version(asset_path)
         version_number = version_number + 1
@@ -234,12 +234,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                         "%s" % (missing_keys)
             self.logger.error(error_msg)
             raise Exception(error_msg)
-        
+
         item.properties["path"] = publish_template.apply_fields(fields)
         item.properties["publish_path"] = item.properties["path"]
         item.properties["publish_type"] = "Unreal Render"
         item.properties["version_number"] = version_number
-            
+
         return True
 
     def publish(self, settings, item):
@@ -258,9 +258,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # get the path in a normalized state. no trailing separator, separators
         # are appropriate for current os, no double separators, etc.
-        
+
         # let the base class register the publish
-        
+
         publish_path = item.properties.get("path")
         publish_path = os.path.normpath(publish_path)
 
@@ -284,10 +284,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # Publish the movie file to Shotgun
         super(UnrealMoviePublishPlugin, self).publish(settings, item)
-        
+
         # Create a Version entry linked with the new publish
-        publish_name = item.properties.get("publish_name")
-        
         # Populate the version data to send to SG
         self.logger.info("Creating Version...")
         version_data = {
@@ -313,7 +311,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                     "label": "Version Data",
                     "tooltip": "Show the complete Version data dictionary",
                     "text": "<pre>%s</pre>" % (
-                    pprint.pformat(version_data),)
+                        pprint.pformat(version_data),
+                    )
                 }
             }
         )
@@ -352,7 +351,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         """
         # do the base class finalization
         super(UnrealMoviePublishPlugin, self).finalize(settings, item)
-        
+
         pass
 
     def _get_version_entity(self, item):
@@ -369,48 +368,47 @@ class UnrealMoviePublishPlugin(HookBaseClass):
     def _unreal_asset_get_version(self, asset_path):
         asset = unreal.EditorAssetLibrary.load_asset(asset_path)
         version_number = 0
-        
+
         if not asset:
             return version_number
-            
+
         engine = sgtk.platform.current_engine()
         tag = engine.get_metadata_tag("version_number")
-        
+
         metadata = unreal.EditorAssetLibrary.get_metadata_tag(asset, tag)
-        
+
         if not metadata:
             return version_number
-        
+
         try:
             version_number = int(metadata)
         except ValueError:
             pass
-            
+
         return version_number
 
     def _unreal_asset_set_version(self, asset_path, version_number):
         asset = unreal.EditorAssetLibrary.load_asset(asset_path)
-        
+
         if not asset:
             return
-            
+
         engine = sgtk.platform.current_engine()
         tag = engine.get_metadata_tag("version_number")
-        
+
         unreal.EditorAssetLibrary.set_metadata_tag(asset, tag, str(version_number))
         unreal.EditorAssetLibrary.save_loaded_asset(asset)
-        
+
         # The save will pop up a progress bar that will bring the editor to the front thus hiding the publish app dialog
         # Workaround: Force all Shotgun dialogs to be brought to front
         engine = sgtk.platform.current_engine()
         for dialog in engine.created_qt_dialogs:
             dialog.raise_()
 
-        
     def _unreal_render_sequence_to_movie(self, destination_path, unreal_map_path, sequence_path, movie_name):
         """
         Renders a given sequence in a given level to a movie file
-        
+
         :param destination_path: Destionation folder where to generate the movie file
         :param unreal_map_path: Path of the Unreal map in which to run the sequence
         :param sequence_path: Content Browser path of sequence to render
@@ -427,13 +425,13 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             # Must delete it first, otherwise the Sequencer will add a number in the filename
             try:
                 os.remove(output_filepath)
-            except OSError as e:
+            except OSError:
                 self.logger.debug("Couldn't delete {}. The Sequencer won't be able to output the movie to that file.".format(output_filepath))
                 return False, None
 
         # Render the sequence to a movie file using the following command-line arguments
         cmdline_args = []
-        
+
         # Note that any command-line arguments (usually paths) that could contain spaces must be enclosed between quotes
         unreal_exec_path = '"{}"'.format(sys.executable)
 
@@ -446,18 +444,18 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         cmdline_args.append(unreal_exec_path)       # Unreal executable path
         cmdline_args.append(unreal_project_path)    # Unreal project
         cmdline_args.append(unreal_map_path)        # Level to load for rendering the sequence
-        
+
         # Command-line arguments for Sequencer Render to Movie
         # See: https://docs.unrealengine.com/en-us/Engine/Sequencer/Workflow/RenderingCmdLine
         sequence_path = "-LevelSequence={}".format(sequence_path)
         cmdline_args.append(sequence_path)          # The sequence to render
-        
+
         output_path = '-MovieFolder="{}"'.format(destination_path)
         cmdline_args.append(output_path)            # output folder, must match the work template
 
         movie_name_arg = "-MovieName={}".format(movie_name)
         cmdline_args.append(movie_name_arg)         # output filename
-        
+
         cmdline_args.append("-game")
         cmdline_args.append("-MovieSceneCaptureType=/Script/MovieSceneCapture.AutomatedLevelSequenceCapture")
         cmdline_args.append("-ResX=1280")
@@ -473,7 +471,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         cmdline_args.append("-NoScreenMessages")
 
         unreal.log("Sequencer command-line arguments: {}".format(cmdline_args))
-        
+
         # Send the arguments as a single string because some arguments could contain spaces and we don't want those to be quoted
         subprocess.call(" ".join(cmdline_args))
 

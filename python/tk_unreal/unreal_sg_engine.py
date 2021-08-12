@@ -1,5 +1,5 @@
 # This file is based on templates provided and copyrighted by Autodesk, Inc.
-# This file has been modified by Epic Games, Inc. and is subject to the license 
+# This file has been modified by Epic Games, Inc. and is subject to the license
 # file included in this repository.
 
 import unreal
@@ -10,6 +10,7 @@ import os
 
 unreal.log("Loading Shotgun Engine for Unreal from {}".format(__file__))
 
+
 @unreal.uclass()
 class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
@@ -18,14 +19,14 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         Equivalent to __init__ but will also be called from C++
         """
         config.wrapper_instance = self
-        
+
     @unreal.ufunction(override=True)
     def get_shotgun_menu_items(self):
         """
         Returns the list of available menu items to populate the Shotgun menu in Unreal
         """
         menu_items = []
-        
+
         engine = sgtk.platform.current_engine()
         menu_items = self.create_menu(engine)
 
@@ -46,7 +47,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
             command = engine.commands[command_name]
             command_callback = command["callback"]
             command_callback = self._get_command_override(engine, command_name, command_callback)
-            
+
             self._execute_callback(command_callback)
             # self._execute_deferred(command["callback"])
 
@@ -64,14 +65,14 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                 app = engine.apps["tk-multi-shotgunpanel"]
                 entity_type, entity_id = self._get_context(engine)
                 if entity_type:
-                    return lambda : app.navigate(entity_type, entity_id, app.DIALOG)
+                    return lambda: app.navigate(entity_type, entity_id, app.DIALOG)
                 else:
                     return default_callback
-            
+
             return show_shotgunpanel_with_context()
-            
+
         return default_callback
-    
+
     def _get_context_url(self, engine):
         """
         Get the Shotgun entity URL from the metadata of the selected asset, if present
@@ -83,10 +84,10 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         selected_asset = self.selected_assets[0] if self.selected_assets else None
         try:
             selected_actors = self.get_selected_actors()
-        except:
+        except Exception:
             selected_actors = self.selected_actors
         selected_actor = selected_actors[0] if selected_actors else None
-        
+
         loaded_asset = None
         if selected_asset:
             # Asset must be loaded to read the metadata from item
@@ -104,7 +105,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
             metadata_value = unreal.EditorAssetLibrary.get_metadata_tag(loaded_asset, tag)
             if metadata_value:
                 url = metadata_value
-                
+
         return url
 
     def _get_context(self, engine):
@@ -126,12 +127,12 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                     try:
                         # Entity id must be converted to an integer
                         entity_id = int(tokens[-1])
-                    except:
+                    except Exception:
                         # Otherwise, the context cannot be derived from the URL
                         entity_type = None
-                    
+
         return entity_type, entity_id
-        
+
     def _execute_callback(self, callback):
         """
         Execute the callback right away
@@ -147,7 +148,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         unreal.log("{0} _execute_deferred called with {1}".format(self, callback.__str__()))
         self._callback = callback
-        
+
         from sgtk.platform.qt5 import QtCore
         QtCore.QTimer.singleShot(0, self._execute_within_exception_trap)
 
@@ -162,9 +163,10 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                 self._callback()
             except Exception as e:
                 current_engine = sgtk.platform.current_engine()
+                current_engine.logger.debug("%s" % e, exc_info=True)
                 current_engine.logger.exception("An exception was raised from Toolkit")
             self._callback = None
-                
+
     @unreal.ufunction(override=True)
     def shutdown(self):
         from sgtk.platform.qt5 import QtWidgets
@@ -172,15 +174,15 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         engine = sgtk.platform.current_engine()
         if engine is not None:
             unreal.log("Shutting down ShotgunEngineWrapper")
-            
+
             # destroy_engine of tk-unreal will take care of closing all dialogs that are still opened
             engine.destroy()
             QtWidgets.QApplication.instance().quit()
             QtWidgets.QApplication.processEvents()
-        
+
     """
     Menu generation functionality for Unreal (based on the 3ds max Menu Generation implementation)
-    
+
     Actual menu creation is done in Unreal
     The following functions simply generate a list of available commands that will populate the Shotgun menu in Unreal
     """
@@ -203,7 +205,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         for cmd in cmd_items:
             if cmd.get_type() == "context_menu":
                 self._add_menu_item_from_command(menu_items, cmd)
-                
+
         # end the contextual menu
         self._add_menu_item(menu_items, "context_end")
 
@@ -220,7 +222,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                     cmd.favourite = True
 
         self._add_menu_item(menu_items, "separator")
-        
+
         # now go through all of the other menu items.
         # separate them out into various sections
         commands_by_app = {}
@@ -232,7 +234,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                 if app_name is None:
                     # un-parented app
                     app_name = "Other Items"
-                if not app_name in commands_by_app:
+                if app_name not in commands_by_app:
                     commands_by_app[app_name] = []
                 commands_by_app[app_name].append(cmd)
 
@@ -245,13 +247,15 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         Adds the given command to the list of menu items using the command's properties
         """
-        self._add_menu_item(menu_items, 
-                            command.properties.get("type", "default"),
-                            command.properties.get("short_name", command.name),
-                            command.name,
-                            command.properties.get("description", ""))
+        self._add_menu_item(
+            menu_items,
+            command.properties.get("type", "default"),
+            command.properties.get("short_name", command.name),
+            command.name,
+            command.properties.get("description", "")
+        )
 
-    def _add_menu_item(self, menu_items, type, name = "", title = "", description = ""):
+    def _add_menu_item(self, menu_items, type, name="", title="", description=""):
         """
         Adds a new Unreal ShotgunMenuItem to the menu items
         """
@@ -261,7 +265,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         menu_item.type = type
         menu_item.description = description
         menu_items.append(menu_item)
-        
+
     def _start_contextual_menu(self, engine, menu_items):
         """
         Starts a menu section for the current context
@@ -270,7 +274,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         ctx_name = str(ctx)
 
         self._add_menu_item(menu_items, "context_begin", ctx_name, ctx_name)
-        
+
         engine.register_command("Jump to Shotgun", self._jump_to_sg, {"type": "context_menu", "short_name": "jump_to_sg"})
 
         # Add the menu item only when there are some file system locations.
@@ -319,15 +323,15 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         try:
             has_selected_actors = len(self.get_selected_actors()) > 0
-        except:
+        except Exception:
             has_selected_actors = len(self.selected_actors) > 0
         has_selection = len(self.selected_assets) > 0 or has_selected_actors
-        
+
         for app_name in sorted(commands_by_app.keys()):
             # Exclude the Publish app if it doesn't have any context
             if app_name == "Publish" and not has_selection:
                 continue
-                
+
             if len(commands_by_app[app_name]) > 1:
                 # more than one menu entry fort his app
                 # make a menu section and put all items in that menu section
@@ -344,6 +348,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
                 if not cmd_obj.favourite:
                     # skip favourites since they are alreay on the menu
                     self._add_menu_item_from_command(menu_items, cmd_obj)
+
 
 class AppCommand(object):
     """

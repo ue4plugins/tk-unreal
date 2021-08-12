@@ -1,0 +1,27 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+# The github_ci_token variable is defined in the Azure Pipeline web page as a
+# secret variable and is a github personal token.
+
+jobs:
+- job: 'Flake8'
+  pool:
+   vmImage: 'Ubuntu 16.04'
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: 2.7
+      architecture: 'x64'
+
+  - script: |
+        python -m pip install --upgrade pip setuptools wheel
+    displayName: 'Install prerequisites'
+
+  - script: |
+        python -m pip install flake8
+        flake8 .
+    displayName: 'Run flake8'

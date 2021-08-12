@@ -1,5 +1,5 @@
 # This file is based on templates provided and copyrighted by Autodesk, Inc.
-# This file has been modified by Epic Games, Inc. and is subject to the license 
+# This file has been modified by Epic Games, Inc. and is subject to the license
 # file included in this repository.
 
 
@@ -7,6 +7,7 @@ from __future__ import print_function
 import sys
 import os
 import logging
+
 
 def bootstrap_plugin(plugin_root_path):
 
@@ -51,25 +52,26 @@ def bootstrap_plugin(plugin_root_path):
         manager.get_entity_from_environment()
     )
     _on_engine_initialized()
-    
+
     # asynchronous doesn't work for now
-    # manager.bootstrap_engine_async(
-        # os.environ.get("SHOTGUN_ENGINE", "tk-unreal"),
-        # manager.get_entity_from_environment(),
-        # _on_engine_initialized
-    # )
+#     manager.bootstrap_engine_async(
+#         os.environ.get("SHOTGUN_ENGINE", "tk-unreal"),
+#         manager.get_entity_from_environment(),
+#         _on_engine_initialized
+#     )
+
 
 def _on_engine_initialized():
     import sgtk
 
     sgtk_logger = sgtk.LogManager.get_logger("plugin")
     sgtk_logger.debug("tk-unreal finished initialization.")
-    
+
     import unreal
-    
+
     unreal.ShotgunEngine.get_instance().on_engine_initialized()
 
-    
+
 def _initialize_manager(plugin_root_path):
     """
     Initializes a ToolkitManager for use in zero-config mode.
@@ -93,7 +95,7 @@ def _initialize_manager(plugin_root_path):
     import sgtk
 
     _initialize_logger(sgtk.LogManager())
-    
+
     # get a logger for the plugin
     sgtk_logger = sgtk.LogManager.get_logger("plugin")
     sgtk_logger.debug("Booting up toolkit plugin.")
@@ -120,6 +122,7 @@ def _initialize_manager(plugin_root_path):
     toolkit_mgr.plugin_id = plugin_id
 
     return toolkit_mgr
+
 
 def _initialize_logger(log_manager):
     # start logging to log file
