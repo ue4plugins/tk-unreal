@@ -9,6 +9,7 @@ import pprint
 import subprocess
 import sys
 import datetime
+import tempfile
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -227,7 +228,29 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         fields["MM"] = date.month
         fields["DD"] = date.day
 
-        # ensure the fields work for the publish template
+        # Check if we can use the Movie Render queue available from 4.26
+        use_movie_render_queue = False
+        if "MoviePipelineQueueEngineSubsystem" in dir(unreal):
+            if "MoviePipelineAppleProResOutput" in dir(unreal):
+                use_movie_render_queue = True
+                self.logger.info("Movie Render Queue will be used for rendering.")
+            else:
+                self.logger.info(
+                    "Apple ProRes Media plugin must be loaded to be able to render with the Movie Render Queue, "
+                    "Level Sequencer will be used for rendering."
+                )
+        else:
+            self.logger.info("Movie Render Queue not available, Level Sequencer will be used for rendering.")
+        item.properties["use_movie_render_queue"] = use_movie_render_queue
+        # Set the UE movie extension based on the current platform and rendering engine
+        if use_movie_render_queue:
+            fields["ue_mov_ext"] = "mov"  # mov on all platforms
+        else:
+            if sys.platform == "win32":
+                fields["ue_mov_ext"] = "avi"
+            else:
+                fields["ue_mov_ext"] = "mov"
+        # Ensure the fields work for the publish template
         missing_keys = publish_template.missing_keys(fields)
         if missing_keys:
             error_msg = "Missing keys required for the publish template " \
@@ -265,8 +288,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         publish_path = os.path.normpath(publish_path)
 
         # Split the destination path into folder and filename
-        destination_folder = os.path.split(publish_path)[0]
-        movie_name = os.path.split(publish_path)[1]
+        destination_folder, movie_name = os.path.split(publish_path)
         movie_name = os.path.splitext(movie_name)[0]
 
         # Ensure that the destination path exists before rendering the sequence
@@ -277,7 +299,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         unreal_map_path = item.properties["unreal_map_path"]
         unreal.log("movie name: {}".format(movie_name))
         # Render the movie
-        self._unreal_render_sequence_to_movie(destination_folder, unreal_map_path, unreal_asset_path, movie_name)
+        if item.properties.get("use_movie_render_queue"):
+            self.logger.info("Rendering %s with the Movie Render Queue." % publish_path)
+            self._unreal_render_sequence_with_movie_queue(publish_path, unreal_map_path, unreal_asset_path)
+        else:
+            self.logger.info("Rendering %s with the Level Sequencer." % publish_path)
+            self._unreal_render_sequence_with_sequencer(publish_path, unreal_map_path, unreal_asset_path)
 
         # Increment the version number
         self._unreal_asset_set_version(unreal_asset_path, item.properties["version_number"])
@@ -405,28 +432,29 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         for dialog in engine.created_qt_dialogs:
             dialog.raise_()
 
-    def _unreal_render_sequence_to_movie(self, destination_path, unreal_map_path, sequence_path, movie_name):
+    def _unreal_render_sequence_with_sequencer(self, output_path, unreal_map_path, sequence_path):
         """
-        Renders a given sequence in a given level to a movie file
+        Renders a given sequence in a given level to a movie file with the Level Sequencer.
 
-        :param destination_path: Destionation folder where to generate the movie file
-        :param unreal_map_path: Path of the Unreal map in which to run the sequence
-        :param sequence_path: Content Browser path of sequence to render
-        :param movie_name: Filename of the movie that will be generated
+        :param str output_path: Full path to the movie to render.
+        :param str unreal_map_path: Path of the Unreal map in which to run the sequence.
+        :param str sequence_path: Content Browser path of sequence to render.
         :returns: True if a movie file was generated, False otherwise
                   string representing the path of the generated movie file
         """
+        output_folder, output_file = os.path.split(output_path)
+        movie_name = os.path.splitext(output_file)[0]
+
         # First, check if there's a file that will interfere with the output of the Sequencer
         # Sequencer can only render to avi file format
-        output_filename = "{}.avi".format(movie_name)
-        output_filepath = os.path.join(destination_path, output_filename)
-
-        if os.path.isfile(output_filepath):
+        if os.path.isfile(output_path):
             # Must delete it first, otherwise the Sequencer will add a number in the filename
             try:
-                os.remove(output_filepath)
+                os.remove(output_path)
             except OSError:
-                self.logger.debug("Couldn't delete {}. The Sequencer won't be able to output the movie to that file.".format(output_filepath))
+                self.logger.error(
+                    "Couldn't delete {}. The Sequencer won't be able to output the movie to that file.".format(output_path)
+                )
                 return False, None
 
         # Render the sequence to a movie file using the following command-line arguments
@@ -450,7 +478,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         sequence_path = "-LevelSequence={}".format(sequence_path)
         cmdline_args.append(sequence_path)          # The sequence to render
 
-        output_path = '-MovieFolder="{}"'.format(destination_path)
+        output_path = '-MovieFolder="{}"'.format(output_folder)
         cmdline_args.append(output_path)            # output folder, must match the work template
 
         movie_name_arg = "-MovieName={}".format(movie_name)
@@ -475,4 +503,128 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # Send the arguments as a single string because some arguments could contain spaces and we don't want those to be quoted
         subprocess.call(" ".join(cmdline_args))
 
-        return os.path.isfile(output_filepath), output_filepath
+        return os.path.isfile(output_path), output_path
+
+    def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path):
+        """
+        Renders a given sequence in a given level with the Movie Render queue.
+
+        :param str output_path: Full path to the movie to render.
+        :param str unreal_map_path: Path of the Unreal map in which to run the sequence.
+        :param str sequence_path: Content Browser path of sequence to render.
+        :returns: True if a movie file was generated, False otherwise
+                  string representing the path of the generated movie file
+        """
+        output_folder, output_file = os.path.split(output_path)
+        movie_name = os.path.splitext(output_file)[0]
+
+        qsub = unreal.MoviePipelineQueueEngineSubsystem()
+        queue = qsub.get_queue()
+        job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
+        job.sequence = unreal.SoftObjectPath(sequence_path)
+        job.map = unreal.SoftObjectPath(unreal_map_path)
+        # Set settings
+        config = job.get_configuration()
+        # https://docs.unrealengine.com/4.26/en-US/PythonAPI/class/MoviePipelineOutputSetting.html?highlight=setting#unreal.MoviePipelineOutputSetting
+        output_setting = config.find_or_add_setting_by_class(unreal.MoviePipelineOutputSetting)
+        output_setting.output_directory = unreal.DirectoryPath(output_folder)
+        output_setting.output_resolution = unreal.IntPoint(1280, 720)
+        output_setting.file_name_format = movie_name
+        output_setting.override_existing_output = True  # Overwrite existing files
+        # Render to a movie
+        config.find_or_add_setting_by_class(unreal.MoviePipelineAppleProResOutput)
+        # TODO: check which codec we should use.
+        # Default rendering
+        config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
+        # Additional pass with detailed lighting?
+        # render_pass = config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPass_DetailLighting)
+
+        # We render in a forked process that we can control.
+        # It would be possible to render in from the running process using an
+        # Executor, however it seems to sometimes deadlock if we don't let Unreal
+        # process its internal events, rendering is asynchronous and being notified
+        # when the render completed does not seem to be reliable.
+        # Sample code:
+        #    exc = unreal.MoviePipelinePIEExecutor()
+        #    # If needed, we can store data in exc.user_data
+        #    # In theory we can set a callback to be notified about completion
+        #    def _on_movie_render_finished_cb(executor, result):
+        #       print("Executor %s finished with %s" % (executor, result))
+        #    # exc.on_executor_finished_delegate.add_callable(_on_movie_render_finished_cb)
+        #    r = qsub.render_queue_with_executor_instance(exc)
+
+        # We can't control the name of the manifest file, so we save and then rename the file.
+        _, manifest_path = unreal.MoviePipelineEditorLibrary.save_queue_to_manifest_file(queue)
+        manifest_path = os.path.abspath(manifest_path)
+        manifest_dir, manifest_file = os.path.split(manifest_path)
+        f, new_path = tempfile.mkstemp(
+            suffix=os.path.splitext(manifest_file)[1],
+            dir=manifest_dir
+        )
+        os.close(f)
+        os.replace(manifest_path, new_path)
+
+        self.logger.debug("Queue manifest saved in %s" % new_path)
+        # We now need a path local to the unreal project "Saved" folder.
+        manifest_path = new_path.replace(
+            "%s%s" % (
+                os.path.abspath(
+                    os.path.join(unreal.SystemLibrary.get_project_directory(), "Saved")
+                ),
+                os.path.sep,
+            ),
+            "",
+        )
+        self.logger.debug("Manifest short path: %s" % manifest_path)
+        # Command line parameters were retrieved by submitting a queue in Unreal Editor with
+        # a MoviePipelineNewProcessExecutor executor.
+        # https://docs.unrealengine.com/4.27/en-US/PythonAPI/class/MoviePipelineNewProcessExecutor.html?highlight=executor
+        cmd_args = [
+            sys.executable,
+            "%s" % os.path.join(
+                unreal.SystemLibrary.get_project_directory(),
+                "%s.uproject" % unreal.SystemLibrary.get_game_name(),
+            ),
+            "MoviePipelineEntryMap?game=/Script/MovieRenderPipelineCore.MoviePipelineGameMode",
+            "-game",
+            "-Multiprocess",
+            "-NoLoadingScreen",
+            "-FixedSeed",
+            "-log",
+            "-Unattended",
+            "-messaging",
+            "-SessionName=\"Publish2 Movie Render\"",
+            "-nohmd",
+            "-windowed",
+            "-ResX=1280",
+            "-ResY=720",
+            # TODO: check what these settings are
+            "-dpcvars=%s" % ",".join([
+                "sg.ViewDistanceQuality=4",
+                "sg.AntiAliasingQuality=4",
+                "sg.ShadowQuality=4",
+                "sg.PostProcessQuality=4",
+                "sg.TextureQuality=4",
+                "sg.EffectsQuality=4",
+                "sg.FoliageQuality=4",
+                "sg.ShadingQuality=4",
+                "r.TextureStreaming=0",
+                "r.ForceLOD=0",
+                "r.SkeletalMeshLODBias=-10",
+                "r.ParticleLODBias=-10",
+                "foliage.DitheredLOD=0",
+                "foliage.ForceLOD=0",
+                "r.Shadow.DistanceScale=10",
+                "r.ShadowQuality=5",
+                "r.Shadow.RadiusThreshold=0.001000",
+                "r.ViewDistanceScale=50",
+                "r.D3D12.GPUTimeout=0",
+                "a.URO.Enable=0",
+            ]),
+            "-execcmds=r.HLOD 0",
+            # This need to be a path relative the to the Unreal project "Saved" folder.
+            "-MoviePipelineConfig=\"%s\"" % manifest_path,
+        ]
+        self.logger.info("Running %s" % cmd_args)
+        subprocess.call(cmd_args)
+        return os.path.isfile(output_path), output_path
