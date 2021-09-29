@@ -3,13 +3,17 @@
 # file included in this repository.
 
 import sgtk
-import os
 import unreal
+from tank_vendor import six
+
+import copy
+import datetime
+import os
 import pprint
 import subprocess
 import sys
-import datetime
 import tempfile
+
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -42,7 +46,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         reference to the movie's current path on disk. A <b>Version</b> entry
         will also be created in Shotgun with the movie file being uploaded
         there. Other users will be able to review the movie in the browser or
-        in RV."""
+        in RV.
+        <br>
+        If available, the Movie Render Queue will be used for rendering,
+        the Level Sequencer will be used otherwise.
+        """
 
     @property
     def settings(self):
@@ -75,6 +83,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 "description": "Template path for published work files. Should"
                                "correspond to a template defined in "
                                "templates.yml.",
+            },
+            "Movie Render Queue Presets Path": {
+                "type": "string",
+                "default": None,
+                "description": "Optional Unreal Path to saved presets "
+                               "for rendering with the Movie Render Queue"
             }
         }
 
@@ -93,6 +107,85 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         ["maya.*", "file.maya"]
         """
         return ["unreal.asset.LevelSequence"]
+
+    def create_settings_widget(self, parent):
+        """
+        Creates a Qt widget, for the supplied parent widget (a container widget
+        on the right side of the publish UI).
+
+        :param parent: The parent to use for the widget being created
+        :return: A :class:`QtGui.QFrame` that displays editable widgets for
+                 modifying the plugin's settings.
+        """
+        # defer Qt-related imports
+        from sgtk.platform.qt import QtGui, QtCore
+
+        # Create a QFrame with all our widgets
+        settings_frame = QtGui.QFrame(parent)
+        # Create our widgets, we add them as properties on the QFrame so we can
+        # retrieve them easily. Qt uses camelCase so our xxxx_xxxx names can't
+        # clash with existing Qt properties.
+
+        # Show this plugin description
+        settings_frame.description_label = QtGui.QLabel(self.description)
+        settings_frame.description_label.setWordWrap(True)
+        settings_frame.description_label.setOpenExternalLinks(True)
+        settings_frame.description_label.setTextFormat(QtCore.Qt.RichText)
+
+        # Unreal setttings
+        settings_frame.unreal_render_presets_label = QtGui.QLabel("Render with Movie Pipeline Presets:")
+        settings_frame.unreal_render_presets_widget = QtGui.QComboBox()
+        settings_frame.unreal_render_presets_widget.addItem("No presets")
+        presets_folder = unreal.MovieRenderPipelineProjectSettings().preset_save_dir
+        for preset in unreal.EditorAssetLibrary.list_assets(presets_folder.path):
+            settings_frame.unreal_render_presets_widget.addItem(preset.split(".")[0])
+        # Create the layout to use within the QFrame
+        settings_layout = QtGui.QVBoxLayout()
+        settings_layout.addWidget(settings_frame.description_label)
+        settings_layout.addWidget(settings_frame.unreal_render_presets_label)
+        settings_layout.addWidget(settings_frame.unreal_render_presets_widget)
+
+        settings_layout.addStretch()
+        settings_frame.setLayout(settings_layout)
+        return settings_frame
+
+    def get_ui_settings(self, widget):
+        """
+        Method called by the publisher to retrieve setting values from the UI.
+
+        :returns: A dictionary with setting values.
+        """
+        self.logger.info("Getting settings from UI")
+
+        # Please note that we don't have to return all settings here, just the
+        # settings which are editable in the UI.
+        render_presets_path = None
+        if widget.unreal_render_presets_widget.currentIndex() > 0:  # First entry is "No Presets"
+            render_presets_path = six.ensure_str(widget.unreal_render_presets_widget.currentText())
+        settings = {
+            "Movie Render Queue Presets Path": render_presets_path,
+        }
+        return settings
+
+    def set_ui_settings(self, widget, settings):
+        """
+        Method called by the publisher to populate the UI with the setting values.
+
+        :param widget: A QFrame we created in `create_settings_widget`.
+        :param settings: A list of dictionaries.
+        :raises NotImplementedError: if editing multiple items.
+        """
+        self.logger.info("Setting UI settings")
+        if len(settings) > 1:
+            # We do not allow editing multiple items
+            raise NotImplementedError
+        cur_settings = settings[0]
+        render_presets_path = cur_settings["Movie Render Queue Presets Path"]
+        preset_index = 0
+        if render_presets_path:
+            preset_index = widget.unreal_render_presets_widget.findText(render_presets_path)
+            self.logger.info("Index for %s is %s" % (render_presets_path, preset_index))
+        widget.unreal_render_presets_widget.setCurrentIndex(preset_index)
 
     def accept(self, settings, item):
         """
@@ -230,10 +323,17 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # Check if we can use the Movie Render queue available from 4.26
         use_movie_render_queue = False
+        render_presets = None
         if "MoviePipelineQueueEngineSubsystem" in dir(unreal):
             if "MoviePipelineAppleProResOutput" in dir(unreal):
                 use_movie_render_queue = True
                 self.logger.info("Movie Render Queue will be used for rendering.")
+                render_presets_path = settings["Movie Render Queue Presets Path"].value
+                if render_presets_path:
+                    self.logger.info("Validating render presets path %s" % render_presets_path)
+                    render_presets = unreal.EditorAssetLibrary.load_asset(render_presets_path)
+                    for _, reason in self._check_render_settings(render_presets):
+                        self.logger.warning(reason)
             else:
                 self.logger.info(
                     "Apple ProRes Media plugin must be loaded to be able to render with the Movie Render Queue, "
@@ -242,6 +342,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         else:
             self.logger.info("Movie Render Queue not available, Level Sequencer will be used for rendering.")
         item.properties["use_movie_render_queue"] = use_movie_render_queue
+        item.properties["movie_render_queue_presets"] = render_presets
         # Set the UE movie extension based on the current platform and rendering engine
         if use_movie_render_queue:
             fields["ue_mov_ext"] = "mov"  # mov on all platforms
@@ -264,6 +365,25 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         item.properties["version_number"] = version_number
 
         return True
+
+    def _check_render_settings(self, render_config):
+        """
+        Check settings from the given render preset and report which ones are problematic and why.
+
+        :param render_config: An Unreal Movie Pipeline render config.
+        :returns: A potentially empty list of tuples, where each tuple is a setting and a string explaining the problem.
+        """
+        invalid_settings = []
+        # To avoid having multiple outputs, only keep the main render pass and the expected output format.
+        for setting in render_config.get_all_settings():
+            # Check for render passes. Since some classes derive from MoviePipelineDeferredPassBase, which is what we want to only keep
+            # we can't use isinstance and use type instead.
+            if isinstance(setting, unreal.MoviePipelineImagePassBase) and type(setting) != unreal.MoviePipelineDeferredPassBase:
+                invalid_settings.append((setting, "Render pass %s would cause multiple outputs" % setting.get_name()))
+            # Check rendering outputs
+            elif isinstance(setting, unreal.MoviePipelineOutputBase) and not isinstance(setting, unreal.MoviePipelineAppleProResOutput):
+                invalid_settings.append((setting, "Render output %s would cause multiple outputs" % setting.get_name()))
+        return invalid_settings
 
     def publish(self, settings, item):
         """
@@ -300,8 +420,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         unreal.log("movie name: {}".format(movie_name))
         # Render the movie
         if item.properties.get("use_movie_render_queue"):
-            self.logger.info("Rendering %s with the Movie Render Queue." % publish_path)
-            self._unreal_render_sequence_with_movie_queue(publish_path, unreal_map_path, unreal_asset_path)
+            presets = item.properties["movie_render_queue_presets"]
+            if presets:
+                self.logger.info("Rendering %s with the Movie Render Queue with %s presets." % (publish_path, presets.get_name()))
+            else:
+                self.logger.info("Rendering %s with the Movie Render Queue." % publish_path)
+            self._unreal_render_sequence_with_movie_queue(publish_path, unreal_map_path, unreal_asset_path, presets)
         else:
             self.logger.info("Rendering %s with the Level Sequencer." % publish_path)
             self._unreal_render_sequence_with_sequencer(publish_path, unreal_map_path, unreal_asset_path)
@@ -505,13 +629,14 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         return os.path.isfile(output_path), output_path
 
-    def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path):
+    def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path, presets=None):
         """
         Renders a given sequence in a given level with the Movie Render queue.
 
         :param str output_path: Full path to the movie to render.
         :param str unreal_map_path: Path of the Unreal map in which to run the sequence.
         :param str sequence_path: Content Browser path of sequence to render.
+        :param presets: Optional :class:`unreal.MoviePipelineMasterConfig` instance to use for renderig.
         :returns: True if a movie file was generated, False otherwise
                   string representing the path of the generated movie file
         """
@@ -523,7 +648,10 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
         job.sequence = unreal.SoftObjectPath(sequence_path)
         job.map = unreal.SoftObjectPath(unreal_map_path)
-        # Set settings
+        # Set settings from presets, if any
+        if presets:
+            job.set_preset_origin(presets)
+        # Ensure the settings we need are set.
         config = job.get_configuration()
         # https://docs.unrealengine.com/4.26/en-US/PythonAPI/class/MoviePipelineOutputSetting.html?highlight=setting#unreal.MoviePipelineOutputSetting
         output_setting = config.find_or_add_setting_by_class(unreal.MoviePipelineOutputSetting)
@@ -531,13 +659,16 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_setting.output_resolution = unreal.IntPoint(1280, 720)
         output_setting.file_name_format = movie_name
         output_setting.override_existing_output = True  # Overwrite existing files
+        # Remove problematic settings
+        for setting, reason in self._check_render_settings(config):
+            self.logger.warning("Disabling %s: %s." % (setting.get_name(), reason))
+            config.remove_setting(setting)
+
+        # Default rendering
+        config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
         # Render to a movie
         config.find_or_add_setting_by_class(unreal.MoviePipelineAppleProResOutput)
         # TODO: check which codec we should use.
-        # Default rendering
-        config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPassBase)
-        # Additional pass with detailed lighting?
-        # render_pass = config.find_or_add_setting_by_class(unreal.MoviePipelineDeferredPass_DetailLighting)
 
         # We render in a forked process that we can control.
         # It would be possible to render in from the running process using an
@@ -625,6 +756,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             # This need to be a path relative the to the Unreal project "Saved" folder.
             "-MoviePipelineConfig=\"%s\"" % manifest_path,
         ]
+        # Make a shallow copy of the current environment and clear some variables
+        run_env = copy.copy(os.environ)
+        # Prevent SG TK to try to bootstrap in the new process
+        if "UE_SHOTGUN_BOOTSTRAP" in run_env:
+            del run_env["UE_SHOTGUN_BOOTSTRAP"]
         self.logger.info("Running %s" % cmd_args)
-        subprocess.call(cmd_args)
+        subprocess.call(cmd_args, env=run_env)
         return os.path.isfile(output_path), output_path
