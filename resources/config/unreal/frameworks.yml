@@ -1,0 +1,12 @@
+# This file is based on templates provided and copyrighted by Autodesk, Inc.
+# This file has been modified by Epic Games, Inc. and is subject to the license
+# file included in this repository.
+
+ # unrealqt - PySide build for Unreal
+frameworks:
+    tk-framework-unrealqt_v1.x.x:
+      location:
+        type: github_release
+        organization: ue4plugins
+        repository: tk-framework-unrealqt
+        version: v1.1.0

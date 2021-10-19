@@ -1,0 +1,67 @@
+# This file is based on templates provided and copyrighted by Autodesk, Inc.
+# This file has been modified by Epic Games, Inc. and is subject to the license
+# file included in this repository.
+
+keys:
+# These are used by the Loader in Unreal
+    ue_sg_asset_type:
+        type: str
+        shotgun_entity_type: Asset
+        shotgun_field_name: sg_asset_type
+    ue_sg_asset_name:
+        type: str
+        shotgun_entity_type: Asset
+        shotgun_field_name: code
+    ue_sg_shot_name:
+        type: str
+        shotgun_entity_type: Shot
+        shotgun_field_name: code
+    ue_sg_sequence_name:
+        type: str
+        shotgun_entity_type: Shot
+        shotgun_field_name: sg_sequence
+    # These are used by the Movie Publish in Unreal
+    ue_level_sequence:
+        type: str
+    ue_world:
+        type: str
+    # Movie extension for UE, avi on Windows, mov on other platforms
+    ue_mov_ext:
+        type: str
+        choices:
+            mov: Quicktime Movie (.mov)
+            avi: Audio Video Interleaved (.avi)
+
+paths:
+ #
+    # Unreal
+    #
+
+    # level sequence review output from unreal
+    unreal.movie_publish:
+        definition: '[sequences/{Sequence}/][{Shot}/]editorial/{YYYY}_{MM}_{DD}/unreal/{ue_level_sequence}_{ue_world}.v{version}.{ue_mov_ext}'
+    unreal_shot_publish:
+        definition: '@shot_root/publish/unreal/{name}.v{version}.nk'
+    # The location of FBX exports for Unreal
+    unreal.maya_asset_fbx_publish:
+        definition: '@asset_root/publish/fbx/{name}.v{version}.fbx'
+    # The location of turntable review output rendered in Unreal
+    unreal.maya_turntable_render:
+        definition: '@asset_root/work/images/{name}_turntable_v{version}.{ue_mov_ext}'
+    unreal.maya_turntable_publish:
+        definition: '@asset_root/review/{Asset}_{name}_turntable_v{version}.{ue_mov_ext}'
+    # Placeholder location for static mesh assets exported from Unreal
+    # Hook implementation intended to be a starting point for a pipeline
+    # No context info used in template, developers expected to further customize
+    unreal.asset_publish:
+        definition: 'assets/unrealdemo/exports/{YYYY}_{MM}_{DD}/{name}.fbx'
+strings:
+   # entity-specific templates for importing files into the Unreal content browser
+    # template logic is defined in Python, not settings:
+    # tk-unreal/hooks/tk-multi-loader2/tk-unreal_actions.py
+    unreal_loader_asset_path: "/Game/Assets/{ue_sg_asset_type}/{ue_sg_asset_name}/"
+    unreal_loader_asset_name: "{ue_sg_asset_name}_{name}"
+    unreal_loader_shot_path: "/Game/Cinematics/Sequences/{ue_sg_sequence_name}/{ue_sg_shot_name}/"
+    unreal_loader_shot_name: "{ue_sg_shot_name}_{name}"
+    unreal_loader_project_path: "/Game/Assets/"
+    unreal_loader_project_name: "{name}"

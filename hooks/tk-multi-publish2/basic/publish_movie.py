@@ -303,8 +303,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # Add the map name and level sequence to fields
         world_name = unreal_map.get_name()
-        fields["world"] = world_name
-        fields["level_sequence"] = asset_name
+        fields["ue_world"] = world_name
+        fields["ue_level_sequence"] = asset_name
 
         # Stash the level sequence and map paths in properties for the render
         item.properties["unreal_asset_path"] = asset_path

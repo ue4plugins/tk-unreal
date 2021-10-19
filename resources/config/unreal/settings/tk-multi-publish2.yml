@@ -1,0 +1,72 @@
+# This file is based on templates provided and copyrighted by Autodesk, Inc.
+# This file has been modified by Epic Games, Inc. and is subject to the license
+# file included in this repository.
+
+################################################################################
+
+publish_help_url: &help_url "https://support.shotgunsoftware.com/hc/en-us/articles/115000068574-Integrations-User-Guide#The%20Publisher"
+
+includes:
+- ../../app_locations.yml
+
+settings.tk-multi-publish2.unreal.project:
+  collector: "{self}/collector.py:{engine}/tk-multi-publish2/basic/collector.py"
+  publish_plugins:
+  - name: Publish to ShotGrid
+    hook: "{self}/publish_file.py"
+    settings: {}
+  - name: Upload for review
+    hook: "{self}/upload_version.py"
+    settings: {}
+  - name: Publish to ShotGrid
+    hook: "{self}/publish_file.py:{engine}/tk-multi-publish2/basic/publish_session.py"
+    settings: {}
+  - name: Export FBX and Publish to ShotGrid
+    hook: "{self}/publish_file.py:{engine}/tk-multi-publish2/basic/publish_asset.py"
+    settings:
+        Publish Template: unreal.asset_publish
+  - name: Render Movie and Submit for Review
+    hook: "{self}/publish_file.py:{engine}/tk-multi-publish2/basic/publish_movie.py"
+    settings:
+        Publish Template: unreal.movie_publish
+  help_url: *help_url
+  location: "@apps.tk-multi-publish2.location"
+
+settings.tk-multi-publish2.maya.asset_step.unreal:
+  collector: "{self}/collector.py:{engine}/tk-multi-publish2/basic/collector.py:{tk-framework-unrealqt_v1.x.x}/tk-multi-publish2/tk-maya/basic/collector.py"
+  collector_settings:
+      Work Template: maya_asset_work
+  publish_plugins:
+  - name: Publish to ShotGrid
+    hook: "{self}/publish_file.py"
+    settings: {}
+  - name: Upload for review
+    hook: "{self}/upload_version.py"
+    settings: {}
+  - name: Begin file versioning
+    hook: "{engine}/tk-multi-publish2/basic/start_version_control.py"
+    settings: {}
+  - name: Publish to ShotGrid
+    hook: "{self}/publish_file.py:{engine}/tk-multi-publish2/basic/publish_session.py"
+    settings:
+        Publish Template: maya_asset_publish
+  - name: Publish to ShotGrid
+    hook: "{self}/publish_file.py:{engine}/tk-multi-publish2/basic/publish_session_geometry.py"
+    settings:
+        Publish Template: asset_alembic_cache
+  - name: Publish FBX to ShotGrid
+    hook: "{self}/publish_file.py:{tk-framework-unrealqt_v1.x.x}/tk-multi-publish2/tk-maya/basic/publish_fbx.py"
+    settings:
+        Publish Template: unreal.maya_asset_fbx_publish
+  - name: Publish and Submit for Review
+    hook: "{self}/publish_file.py:{tk-framework-unrealqt_v1.x.x}/tk-multi-publish2/tk-maya/basic/publish_turntable.py"
+    settings:
+        Work Template: unreal.maya_turntable_render
+        Publish Template: unreal.maya_turntable_publish
+        Unreal Engine Version: "4.26"
+        Unreal Project Path Template: "{self}/resources/ueprojects/{unreal_engine_version}/turntable/turntable.uproject"
+        Turntable Map Path: "/Game/turntable/level/turntable.umap"
+        Sequence Path: "/Game/turntable/sequence/turntable_sequence.turntable_sequence"
+        Turntable Assets Path: "/Game/maya_turntable_assets"
+  help_url: *help_url
+  location: "@apps.tk-multi-publish2.location"

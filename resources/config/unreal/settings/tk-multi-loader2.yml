@@ -1,0 +1,32 @@
+# This file is based on templates provided and copyrighted by Autodesk, Inc.
+# This file has been modified by Epic Games, Inc. and is subject to the license
+# file included in this repository.
+
+includes:
+- ../../app_locations.yml
+
+settings.tk-multi-loader2.unreal:
+  action_mappings:
+    Motion Builder FBX: [import_content, import_level]
+    Maya FBX: [import_content]
+  actions_hook: '{engine}/tk-multi-loader2/tk-unreal_actions.py'
+  entities:
+  - caption: Assets
+    entity_type: Asset
+    filters:
+    - [project, is, '{context.project}']
+    hierarchy: [sg_asset_type, code]
+  - caption: Shots
+    entity_type: Shot
+    filters:
+    - [project, is, '{context.project}']
+    hierarchy: [sg_sequence, code]
+  - caption: My Tasks
+    type: Query
+    entity_type: Task
+    filters:
+    - [project, is, '{context.project}']
+    - [task_assignees, is, '{context.user}']
+    hierarchy: [entity, content]
+  publish_filters: [["sg_status_list", "is_not", null]]
+  location: "@apps.tk-multi-loader2.location"
