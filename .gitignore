@@ -34,3 +34,4 @@ pip-log.txt
 
 # Visual Studio
 .vs
+.vscode

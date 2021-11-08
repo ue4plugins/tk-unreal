@@ -324,8 +324,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # Check if we can use the Movie Render queue available from 4.26
         use_movie_render_queue = False
         render_presets = None
-        if "MoviePipelineQueueEngineSubsystem" in dir(unreal):
-            if "MoviePipelineAppleProResOutput" in dir(unreal):
+        if hasattr(unreal, "MoviePipelineQueueEngineSubsystem"):
+            if hasattr(unreal, "MoviePipelineAppleProResOutput"):
                 use_movie_render_queue = True
                 self.logger.info("Movie Render Queue will be used for rendering.")
                 render_presets_path = settings["Movie Render Queue Presets Path"].value
@@ -357,7 +357,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             error_msg = "Missing keys required for the publish template " \
                         "%s" % (missing_keys)
             self.logger.error(error_msg)
-            raise Exception(error_msg)
+            raise ValueError(error_msg)
 
         item.properties["path"] = publish_template.apply_fields(fields)
         item.properties["publish_path"] = item.properties["path"]
@@ -570,7 +570,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         movie_name = os.path.splitext(output_file)[0]
 
         # First, check if there's a file that will interfere with the output of the Sequencer
-        # Sequencer can only render to avi file format
+        # Sequencer can only render to avi or mov file format
         if os.path.isfile(output_path):
             # Must delete it first, otherwise the Sequencer will add a number in the filename
             try:

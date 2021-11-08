@@ -86,13 +86,6 @@ class UnrealSessionCollector(HookBaseClass):
         """
         # Create the session item for the publish hierarchy
         # In Unreal, the current session can be defined as the current level/map (.umap)
-        # display_name = "Current Unreal Session"   # Could retrieve the level name
-#         session_item = parent_item.create_item(
-#             "unreal.session",
-#             "Unreal Session",
-#             display_name
-#         )
-
         # Don't create a session item for now since the .umap does not need to be published
         session_item = parent_item
 
