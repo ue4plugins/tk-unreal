@@ -9,12 +9,12 @@
 jobs:
 - job: 'Flake8'
   pool:
-   vmImage: 'Ubuntu 16.04'
+   vmImage: ubuntu-latest
 
   steps:
   - task: UsePythonVersion@0
     inputs:
-      versionSpec: 2.7
+      versionSpec: 3.7
       architecture: 'x64'
 
   - script: |
