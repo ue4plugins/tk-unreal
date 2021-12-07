@@ -14,6 +14,13 @@ import subprocess
 import sys
 import tempfile
 
+# Local storage path field for known Oses.
+_OS_LOCAL_STORAGE_PATH_FIELD = {
+    "darwin": "mac_path",
+    "win32": "windows_path",
+    "linux": "linux_path",
+    "linux2": "linux_path",
+}[sys.platform]
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -89,6 +96,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 "default": None,
                 "description": "Optional Unreal Path to saved presets "
                                "for rendering with the Movie Render Queue"
+            },
+            "Publish Folder": {
+                "type": "string",
+                "default": None,
+                "description": "Optional folder to use as a root for publishes"
             }
         }
 
@@ -139,11 +151,31 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         presets_folder = unreal.MovieRenderPipelineProjectSettings().preset_save_dir
         for preset in unreal.EditorAssetLibrary.list_assets(presets_folder.path):
             settings_frame.unreal_render_presets_widget.addItem(preset.split(".")[0])
+
+        settings_frame.unreal_publish_folder_label = QtGui.QLabel("Publish folder:")
+        storage_roots = self.parent.shotgun.find(
+            "LocalStorage",
+            [],
+            ["code", _OS_LOCAL_STORAGE_PATH_FIELD]
+        )
+        settings_frame.storage_roots_widget = QtGui.QComboBox()
+        settings_frame.storage_roots_widget.addItem("Current Unreal Project")
+        for storage_root in storage_roots:
+            if storage_root[_OS_LOCAL_STORAGE_PATH_FIELD]:
+                settings_frame.storage_roots_widget.addItem(
+                    "%s (%s)" % (
+                        storage_root["code"],
+                        storage_root[_OS_LOCAL_STORAGE_PATH_FIELD]
+                    ),
+                    userData=storage_root,
+                )
         # Create the layout to use within the QFrame
         settings_layout = QtGui.QVBoxLayout()
         settings_layout.addWidget(settings_frame.description_label)
         settings_layout.addWidget(settings_frame.unreal_render_presets_label)
         settings_layout.addWidget(settings_frame.unreal_render_presets_widget)
+        settings_layout.addWidget(settings_frame.unreal_publish_folder_label)
+        settings_layout.addWidget(settings_frame.storage_roots_widget)
 
         settings_layout.addStretch()
         settings_frame.setLayout(settings_layout)
@@ -155,6 +187,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         :returns: A dictionary with setting values.
         """
+        # defer Qt-related imports
+        from sgtk.platform.qt import QtCore
+
         self.logger.info("Getting settings from UI")
 
         # Please note that we don't have to return all settings here, just the
@@ -162,8 +197,15 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         render_presets_path = None
         if widget.unreal_render_presets_widget.currentIndex() > 0:  # First entry is "No Presets"
             render_presets_path = six.ensure_str(widget.unreal_render_presets_widget.currentText())
+        storage_index = widget.storage_roots_widget.currentIndex()
+        publish_folder = None
+        if storage_index > 0:  # Something selected and not the first entry
+            storage = widget.storage_roots_widget.itemData(storage_index, role=QtCore.Qt.UserRole)
+            publish_folder = storage[_OS_LOCAL_STORAGE_PATH_FIELD]
+
         settings = {
             "Movie Render Queue Presets Path": render_presets_path,
+            "Publish Folder": publish_folder,
         }
         return settings
 
@@ -175,6 +217,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         :param settings: A list of dictionaries.
         :raises NotImplementedError: if editing multiple items.
         """
+        # defer Qt-related imports
+        from sgtk.platform.qt import QtCore
+
         self.logger.info("Setting UI settings")
         if len(settings) > 1:
             # We do not allow editing multiple items
@@ -186,6 +231,66 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             preset_index = widget.unreal_render_presets_widget.findText(render_presets_path)
             self.logger.info("Index for %s is %s" % (render_presets_path, preset_index))
         widget.unreal_render_presets_widget.setCurrentIndex(preset_index)
+        # Note: the template is validated in the accept method, no need to check it here.
+        publish_template_setting = cur_settings.get("Publish Template")
+        publisher = self.parent
+        publish_template = publisher.get_template_by_name(publish_template_setting)
+        if isinstance(publish_template, sgtk.TemplatePath):
+            widget.unreal_publish_folder_label.setEnabled(False)
+            widget.storage_roots_widget.setEnabled(False)
+        folder_index = 0
+        publish_folder = cur_settings["Publish Folder"]
+        if publish_folder:
+            for i in range(widget.storage_roots_widget.count()):
+                data = widget.storage_roots_widget.itemData(i, role=QtCore.Qt.UserRole)
+                if data and data[_OS_LOCAL_STORAGE_PATH_FIELD] == publish_folder:
+                    folder_index = i
+                    break
+            self.logger.debug("Index for %s is %s" % (publish_folder, folder_index))
+        widget.storage_roots_widget.setCurrentIndex(folder_index)
+
+    def load_saved_ui_settings(self, settings):
+        """
+        Load saved settings and update the given settings dictionary with them.
+
+        :param settings: A dictionary where keys are settings names and
+                         values Settings instances.
+        """
+        # Retrieve SG utils framework settings module and instantiate a manager
+        fw = self.load_framework("tk-framework-shotgunutils_v5.x.x")
+        module = fw.import_module("settings")
+        settings_manager = module.UserSettings(self.parent)
+
+        # Retrieve saved settings
+        settings["Movie Render Queue Presets Path"].value = settings_manager.retrieve(
+            "publish2.movie_render_queue_presets_path",
+            settings["Movie Render Queue Presets Path"].value,
+            settings_manager.SCOPE_PROJECT,
+        )
+        settings["Publish Folder"].value = settings_manager.retrieve(
+            "publish2.publish_folder",
+            settings["Publish Folder"].value,
+            settings_manager.SCOPE_PROJECT
+        )
+        self.logger.debug("Loaded settings %s" % settings["Publish Folder"])
+        self.logger.debug("Loaded settings %s" % settings["Movie Render Queue Presets Path"])
+
+    def save_ui_settings(self, settings):
+        """
+        Save UI settings.
+
+        :param settings: A dictionary of Settings instances.
+        """
+        # Retrieve SG utils framework settings module and instantiate a manager
+        fw = self.load_framework("tk-framework-shotgunutils_v5.x.x")
+        module = fw.import_module("settings")
+        settings_manager = module.UserSettings(self.parent)
+
+        # Save settings
+        render_presets_path = settings["Movie Render Queue Presets Path"].value
+        settings_manager.store("publish2.movie_render_queue_presets_path", render_presets_path, settings_manager.SCOPE_PROJECT)
+        publish_folder = settings["Publish Folder"].value
+        settings_manager.store("publish2.publish_folder", publish_folder, settings_manager.SCOPE_PROJECT)
 
     def accept(self, settings, item):
         """
@@ -222,14 +327,14 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         if not publish_template:
             self.logger.debug(
                 "A publish template could not be determined for the "
-                "sequence item. Not accepting the item."
+                "item. Not accepting the item."
             )
             accepted = False
 
         # we've validated the work and publish templates. add them to the item properties
         # for use in subsequent methods
         item.properties["publish_template"] = publish_template
-
+        self.load_saved_ui_settings(settings)
         return {
             "accepted": accepted,
             "checked": True
@@ -271,7 +376,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             return False
 
         # Get the configured publish template
-        publish_template = item.properties.get("publish_template")
+        publish_template = item.properties["publish_template"]
 
         # Get the context from the Publisher UI
         context = item.context
@@ -359,11 +464,23 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             self.logger.error(error_msg)
             raise ValueError(error_msg)
 
-        item.properties["path"] = publish_template.apply_fields(fields)
-        item.properties["publish_path"] = item.properties["path"]
+        publish_path = publish_template.apply_fields(fields)
+        if not os.path.isabs(publish_path):
+            # If the path is not absolute, prepend the publish folder setting.
+            publish_folder = settings["Publish Folder"].value
+            if not publish_folder:
+                publish_folder = unreal.Paths.project_saved_dir()
+            publish_path = os.path.abspath(
+                os.path.join(
+                    publish_folder,
+                    publish_path
+                )
+            )
+        item.properties["path"] = publish_path
+        item.properties["publish_path"] = publish_path
         item.properties["publish_type"] = "Unreal Render"
         item.properties["version_number"] = version_number
-
+        self.save_ui_settings(settings)
         return True
 
     def _check_render_settings(self, render_config):
@@ -404,8 +521,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # let the base class register the publish
 
-        publish_path = item.properties.get("path")
-        publish_path = os.path.normpath(publish_path)
+        publish_path = os.path.normpath(item.properties["publish_path"])
 
         # Split the destination path into folder and filename
         destination_folder, movie_name = os.path.split(publish_path)
@@ -502,8 +618,6 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         """
         # do the base class finalization
         super(UnrealMoviePublishPlugin, self).finalize(settings, item)
-
-        pass
 
     def _get_version_entity(self, item):
         """
