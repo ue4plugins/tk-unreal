@@ -6,10 +6,10 @@ The simplest way to add the ShotGrid Toolkit integration to Unreal is to start f
 - Default2 SG TK configuration: https://github.com/ue4plugins/tk-config-unreal
 - Basic SG TK configuration: https://github.com/ue4plugins/tk-config-unrealbasic
 
-However, it is possible to manually add the integration to an existing SG TK configuration from the files provided in the `resources/config` folder.
+However, it is possible to manually add the integration to an existing SG TK configuration from the files provided by the [default2 based Unreal config](https://github.com/ue4plugins/tk-config-unreal) or the [basic based Unreal config](https://github.com/ue4plugins/tk-config-unrealbasic).
 
 ### Configuring the file system schema for a default2 base configuration
-If your SG TK configuration needs a file system schema, copy the files and directories from `resources/config/schema` under the `core/schema` folder of your existing configuration.
+If your SG TK configuration needs a file system schema, copy the following files and directories from `core/schema` of [this config](https://github.com/ue4plugins/tk-config-unreal) under the `core/schema` folder of your existing configuration.
 ```
 schema/
 └── project
@@ -30,7 +30,7 @@ schema/
 ```
 
 ### Adding the SG TK Unreal components
-The `resources/config/unreal` folder contains all definitions needed by the integration
+Both configs have a self contained `env/includes/unreal` folder which contains all definitions needed by the integration
 ```
 unreal/
 ├── frameworks.yml
