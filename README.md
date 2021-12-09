@@ -30,7 +30,7 @@ schema/
 ```
 
 ### Adding the SG TK Unreal components
-Both configs have a self contained `env/includes` folder which contains all definitions needed by the integration
+Both configs have a self contained `env/includes/unreal` folder which contains all definitions needed by the integration
 ```
 unreal/
 ├── frameworks.yml
