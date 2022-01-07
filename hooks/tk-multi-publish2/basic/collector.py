@@ -1,10 +1,10 @@
-﻿# This file is based on templates provided and copyrighted by Autodesk, Inc.
-# This file has been modified by Epic Games, Inc. and is subject to the license 
+# This file is based on templates provided and copyrighted by Autodesk, Inc.
+# This file has been modified by Epic Games, Inc. and is subject to the license
 # file included in this repository.
 
 import sgtk
 import os
-import unreal
+
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -86,16 +86,9 @@ class UnrealSessionCollector(HookBaseClass):
         """
         # Create the session item for the publish hierarchy
         # In Unreal, the current session can be defined as the current level/map (.umap)
-        # display_name = "Current Unreal Session"   # Could retrieve the level name
-        # session_item = parent_item.create_item(
-            # "unreal.session",
-            # "Unreal Session",
-            # display_name
-        # )
-
         # Don't create a session item for now since the .umap does not need to be published
         session_item = parent_item
-        
+
         # Get the icon path to display for this item
         icon_path = os.path.join(
             self.disk_location,
@@ -103,7 +96,7 @@ class UnrealSessionCollector(HookBaseClass):
             "icons",
             "unreal.png"
         )
-        
+
         # Set the icon for the session item
         # Will also be used for the children items parented to the session item
         session_item.set_icon_from_path(icon_path)
@@ -111,7 +104,7 @@ class UnrealSessionCollector(HookBaseClass):
         # Set the project root
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
         project_root = unreal_sg.get_shotgun_work_dir()
-        
+
         # Important to convert "/" in path returned by Unreal to "\" for templates to work
         project_root = project_root.replace("/", "\\")
         session_item.properties["project_root"] = project_root
@@ -124,18 +117,18 @@ class UnrealSessionCollector(HookBaseClass):
         if work_template_setting:
             publisher = self.parent
             work_template = publisher.get_template_by_name(work_template_setting.value)
-            
+
             if work_template:
                 # Override the work template to use the project root from Unreal and not the default root for templates
                 work_template = sgtk.TemplatePath(work_template.definition, work_template.keys, project_root)
-                
+
                 session_item.properties["work_template"] = work_template
                 self.logger.debug("Work template defined for Unreal collection.")
 
         self.logger.info("Collected current Unreal session")
 
         return session_item
-        
+
     def collect_selected_assets(self, parent_item):
         """
         Creates items for assets selected in Unreal.
@@ -143,12 +136,12 @@ class UnrealSessionCollector(HookBaseClass):
         :param parent_item: Parent Item instance
         """
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
-        
+
         # Iterate through the selected assets and get their info and add them as items to be published
         for asset in unreal_sg.selected_assets:
             asset_name = str(asset.asset_name)
             asset_type = str(asset.asset_class)
-            
+
             item_type = "unreal.asset." + asset_type
             asset_item = parent_item.create_item(
                 item_type,     # Include the asset type for the publish plugin to use
