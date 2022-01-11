@@ -541,11 +541,23 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 self.logger.info("Rendering %s with the Movie Render Queue with %s presets." % (publish_path, presets.get_name()))
             else:
                 self.logger.info("Rendering %s with the Movie Render Queue." % publish_path)
-            self._unreal_render_sequence_with_movie_queue(publish_path, unreal_map_path, unreal_asset_path, presets)
+            res, _ = self._unreal_render_sequence_with_movie_queue(
+                publish_path,
+                unreal_map_path,
+                unreal_asset_path,
+                presets
+            )
         else:
             self.logger.info("Rendering %s with the Level Sequencer." % publish_path)
-            self._unreal_render_sequence_with_sequencer(publish_path, unreal_map_path, unreal_asset_path)
-
+            res, _ = self._unreal_render_sequence_with_sequencer(
+                publish_path,
+                unreal_map_path,
+                unreal_asset_path
+            )
+        if not res:
+            raise RuntimeError(
+                "Unable to render %s" % publish_path
+            )
         # Increment the version number
         self._unreal_asset_set_version(unreal_asset_path, item.properties["version_number"])
 
@@ -696,50 +708,47 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 return False, None
 
         # Render the sequence to a movie file using the following command-line arguments
-        cmdline_args = []
+        cmdline_args = [
+            sys.executable,  # Unreal executable path
+            "%s" % os.path.join(
+                unreal.SystemLibrary.get_project_directory(),
+                "%s.uproject" % unreal.SystemLibrary.get_game_name(),
+            ),  # Unreal project
+            unreal_map_path,  # Level to load for rendering the sequence
+            # Command-line arguments for Sequencer Render to Movie
+            # See: https://docs.unrealengine.com/en-us/Engine/Sequencer/Workflow/RenderingCmdLine
+            #
+            "-LevelSequence=%s" % sequence_path,  # The sequence to render
+            "-MovieFolder=%s" % output_folder,  # Output folder, must match the work template
+            "-MovieName=%s" % movie_name,  # Output filename
+            "-game",
+            "-MovieSceneCaptureType=/Script/MovieSceneCapture.AutomatedLevelSequenceCapture",
+            "-ResX=1280",
+            "-ResY=720",
+            "-ForceRes",
+            "-Windowed",
+            "-MovieCinematicMode=yes",
+            "-MovieFormat=Video",
+            "-MovieFrameRate=24",
+            "-MovieQuality=75",
+            "-NoTextureStreaming",
+            "-NoLoadingScreen",
+            "-NoScreenMessages",
+        ]
 
-        # Note that any command-line arguments (usually paths) that could contain spaces must be enclosed between quotes
-        unreal_exec_path = '"{}"'.format(sys.executable)
+        unreal.log(
+            "Sequencer command-line arguments: {}".format(
+                " ".join(cmdline_args)
+            )
+        )
 
-        # Get the Unreal project to load
-        unreal_project_filename = "{}.uproject".format(unreal.SystemLibrary.get_game_name())
-        unreal_project_path = os.path.join(unreal.SystemLibrary.get_project_directory(), unreal_project_filename)
-        unreal_project_path = '"{}"'.format(unreal_project_path)
+        # Make a shallow copy of the current environment and clear some variables
+        run_env = copy.copy(os.environ)
+        # Prevent SG TK to try to bootstrap in the new process
+        if "UE_SHOTGUN_BOOTSTRAP" in run_env:
+            del run_env["UE_SHOTGUN_BOOTSTRAP"]
 
-        # Important to keep the order for these arguments
-        cmdline_args.append(unreal_exec_path)       # Unreal executable path
-        cmdline_args.append(unreal_project_path)    # Unreal project
-        cmdline_args.append(unreal_map_path)        # Level to load for rendering the sequence
-
-        # Command-line arguments for Sequencer Render to Movie
-        # See: https://docs.unrealengine.com/en-us/Engine/Sequencer/Workflow/RenderingCmdLine
-        sequence_path = "-LevelSequence={}".format(sequence_path)
-        cmdline_args.append(sequence_path)          # The sequence to render
-
-        output_path = '-MovieFolder="{}"'.format(output_folder)
-        cmdline_args.append(output_path)            # output folder, must match the work template
-
-        movie_name_arg = "-MovieName={}".format(movie_name)
-        cmdline_args.append(movie_name_arg)         # output filename
-
-        cmdline_args.append("-game")
-        cmdline_args.append("-MovieSceneCaptureType=/Script/MovieSceneCapture.AutomatedLevelSequenceCapture")
-        cmdline_args.append("-ResX=1280")
-        cmdline_args.append("-ResY=720")
-        cmdline_args.append("-ForceRes")
-        cmdline_args.append("-Windowed")
-        cmdline_args.append("-MovieCinematicMode=yes")
-        cmdline_args.append("-MovieFormat=Video")
-        cmdline_args.append("-MovieFrameRate=24")
-        cmdline_args.append("-MovieQuality=75")
-        cmdline_args.append("-NoTextureStreaming")
-        cmdline_args.append("-NoLoadingScreen")
-        cmdline_args.append("-NoScreenMessages")
-
-        unreal.log("Sequencer command-line arguments: {}".format(cmdline_args))
-
-        # Send the arguments as a single string because some arguments could contain spaces and we don't want those to be quoted
-        subprocess.call(" ".join(cmdline_args))
+        subprocess.call(cmdline_args, env=run_env)
 
         return os.path.isfile(output_path), output_path
 
@@ -773,6 +782,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         output_setting.output_resolution = unreal.IntPoint(1280, 720)
         output_setting.file_name_format = movie_name
         output_setting.override_existing_output = True  # Overwrite existing files
+        # If needed we could enforce a frame rate, like for the Sequencer code.
+        # output_setting.output_frame_rate = unreal.FrameRate(24)
+        # output_setting.use_custom_frame_rate = True
         # Remove problematic settings
         for setting, reason in self._check_render_settings(config):
             self.logger.warning("Disabling %s: %s." % (setting.get_name(), reason))

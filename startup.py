@@ -21,21 +21,23 @@ class EngineLauncher(SoftwareLauncher):
     # matching against supplied versions and products. Similar to the glob
     # strings, these allow us to alter the regex matching for any of the
     # variable components of the path in one place
-    COMPONENT_REGEX_LOOKUP = {"version": r"\d+\.\d+", "major": r"\d+"}
+    # We match 4.27, 5.0EA
+    COMPONENT_REGEX_LOOKUP = {"version": r"\d+\.\d+\w*", "major": r"\d+"}
 
     # This dictionary defines a list of executable template strings for each
     # of the supported operating systems. The templates are used for both
     # globbing and regex matches by replacing the named format placeholders
     # with an appropriate glob or regex string.
-    # Note: Windows is handled differently by checking registries and Linux is
-    # not yet supported.
+    # Note: Software entities need to be manually added by users in SG for Linux
+    # since there is no standard installation path.
     EXECUTABLE_TEMPLATES = {
         "darwin": [
-            "/Users/Shared/Epic Games/UE_{version}/Engine/Binaries/Mac/UE{major}Editor.app"
+            "/Users/Shared/Epic Games/UE_{version}/Engine/Binaries/Mac/UE{major}Editor.app",
+            "/Users/Shared/Epic Games/UE_{version}/Engine/Binaries/Mac/UnrealEditor.app"
         ],
         "win32": [
             "C:/Program Files/Epic Games/UE_{version}/Engine/Binaries/Win64/UE{major}Editor.exe",
-            "C:/Program Files/Epic Games/UE_{version}EA/Engine/Binaries/Win64/UnrealEditor.exe"
+            "C:/Program Files/Epic Games/UE_{version}/Engine/Binaries/Win64/UnrealEditor.exe"
         ],
     }
 

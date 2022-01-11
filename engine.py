@@ -106,18 +106,35 @@ class UnrealEditorEngine(Engine):
 
     def init_qt_app(self):
         self.logger.debug("%s: Initializing QtApp for Unreal", self)
-
         from sgtk.platform.qt5 import QtWidgets
 
         if not QtWidgets.QApplication.instance():
             self._qt_app = QtWidgets.QApplication(sys.argv)
             self._qt_app.setQuitOnLastWindowClosed(False)
-            unreal.log("Created QApplication instance: {0}".format(self._qt_app))
         else:
             self._qt_app = QtWidgets.QApplication.instance()
 
+        # On other platforms than Windows, we need to process the Qt events otherwise
+        # UIs are "frozen". We use a slate tick callback to do that on a regular basis.
+        # It is not clear why this is not needed on Windows, possibly because a
+        # dedicated Windows event dispatcher is used instead of a regular
+        # QAbstractEventDispatcher
+        if sys.platform != "win32":
+            unreal.register_slate_post_tick_callback(self._process_qt_events_cb)
         # Make the QApplication use the dark theme. Must be called after the QApplication is instantiated
         self._initialize_dark_look_and_feel()
+
+    @staticmethod
+    def _process_qt_events_cb(delta_time):
+        """
+        An Unreal tick callback to process QT events.
+
+        :param float delta_time: delta time since the last run.
+        """
+        from sgtk.platform.qt5 import QtWidgets
+        qapp = QtWidgets.QApplication.instance()
+        if qapp:
+            qapp.processEvents()
 
     def post_app_init(self):
         """
@@ -256,7 +273,6 @@ class UnrealEditorEngine(Engine):
             "icon_256.png"))
 
         dialog.setWindowIcon(QtGui.QIcon(unreal_icon))
-
         return dialog
 
     def _define_qt_base(self):
