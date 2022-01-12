@@ -319,8 +319,17 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         """
 
         accepted = True
-        publisher = self.parent
+        checked = True
 
+        if sys.platform != "win32":
+            self.logger.warning(
+                "Movie publishing is not supported on other platforms than Windows..."
+            )
+            return {
+                "accepted": False,
+            }
+
+        publisher = self.parent
         # ensure the publish template is defined
         publish_template_setting = settings.get("Publish Template")
         publish_template = publisher.get_template_by_name(publish_template_setting.value)
@@ -337,7 +346,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         self.load_saved_ui_settings(settings)
         return {
             "accepted": accepted,
-            "checked": True
+            "checked": checked
         }
 
     def validate(self, settings, item):

@@ -268,10 +268,12 @@ class UnrealEditorEngine(Engine):
 
         from sgtk.platform.qt import QtGui
 
-        unreal_icon = os.path.realpath(os.path.join(
-            os.path.dirname(__file__),
-            "icon_256.png"))
-
+        unreal_icon = os.path.realpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "icon_256.png"
+            )
+        )
         dialog.setWindowIcon(QtGui.QIcon(unreal_icon))
         return dialog
 
