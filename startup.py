@@ -21,21 +21,23 @@ class EngineLauncher(SoftwareLauncher):
     # matching against supplied versions and products. Similar to the glob
     # strings, these allow us to alter the regex matching for any of the
     # variable components of the path in one place
-    COMPONENT_REGEX_LOOKUP = {"version": r"\d+\.\d+", "major": r"\d+"}
+    # We match 4.27, 5.0EA
+    COMPONENT_REGEX_LOOKUP = {"version": r"\d+\.\d+\w*", "major": r"\d+"}
 
     # This dictionary defines a list of executable template strings for each
     # of the supported operating systems. The templates are used for both
     # globbing and regex matches by replacing the named format placeholders
     # with an appropriate glob or regex string.
-    # Note: Windows is handled differently by checking registries and Linux is
-    # not yet supported.
+    # Note: Software entities need to be manually added by users in SG for Linux
+    # since there is no standard installation path.
     EXECUTABLE_TEMPLATES = {
         "darwin": [
-            "/Users/Shared/Epic Games/UE_{version}/Engine/Binaries/Mac/UE{major}Editor.app"
+            "/Users/Shared/Epic Games/UE_{version}/Engine/Binaries/Mac/UE{major}Editor.app",
+            "/Users/Shared/Epic Games/UE_{version}/Engine/Binaries/Mac/UnrealEditor.app"
         ],
         "win32": [
             "C:/Program Files/Epic Games/UE_{version}/Engine/Binaries/Win64/UE{major}Editor.exe",
-            "C:/Program Files/Epic Games/UE_{version}EA/Engine/Binaries/Win64/UnrealEditor.exe"
+            "C:/Program Files/Epic Games/UE_{version}/Engine/Binaries/Win64/UnrealEditor.exe"
         ],
     }
 
@@ -59,7 +61,20 @@ class EngineLauncher(SoftwareLauncher):
 
         :returns: A :class:`LaunchInformation` instance.
         """
+        # TODO: Get the startup project from settings somewhere, for now hardcoded
+        # Otherwise, leave it empty and the project selection window will appear
+        # (the command-line arguments are forwarded to the new instance of Unreal Editor)
+        unreal_project = ""
+        args = args + unreal_project
         required_env = {}
+        # Creating a QApplication in Unreal on Mac crashes it, so disable the
+        # SG TK integration for now, just run the executable with its args. This
+        # allows to launch Unreal from tk-desktop or submit turntable renders
+        # from Maya to Unreal, without the integration crashing Unreal.
+        if sys.platform == "darwin":
+            self.logger.warning("SG TK Unreal integration is not available on Mac.")
+            return LaunchInformation(exec_path, args, required_env)
+
         # Usually DCCs have an environment variable for plugins that need to be loaded.
         # Here we're adding ourselves to that list. We add ourselves to the existing one
         # in fact so we play nice with the current environment.
@@ -73,12 +88,6 @@ class EngineLauncher(SoftwareLauncher):
 
         # Signals which engine instance from the environment is going to be used.
         required_env["SHOTGUN_ENGINE"] = self.engine_name
-
-        # TODO: Get the startup project from settings somewhere, for now hardcoded
-        # Otherwise, leave it empty and the project selection window will appear
-        # (the command-line arguments are forwarded to the new instance of Unreal Editor)
-        unreal_project = ""
-        args = args + unreal_project
 
         # Set the bootstrap location in the environment variable that will be used by the Unreal Shotgun startup script
         bootstrap_script = os.path.join(self.disk_location, "plugins", "basic", "bootstrap.py")

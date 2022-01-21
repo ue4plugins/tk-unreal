@@ -4,8 +4,19 @@
 
 import sgtk
 import os
+import sys
 import unreal
 import datetime
+
+
+# Local storage path field for known Oses.
+_OS_LOCAL_STORAGE_PATH_FIELD = {
+    "darwin": "mac_path",
+    "win32": "windows_path",
+    "linux": "linux_path",
+    "linux2": "linux_path",
+}[sys.platform]
+
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -70,7 +81,12 @@ class UnrealAssetPublishPlugin(HookBaseClass):
                 "description": "Template path for published work files. Should"
                                "correspond to a template defined in "
                                "templates.yml.",
-            }
+            },
+            "Publish Folder": {
+                "type": "string",
+                "default": None,
+                "description": "Optional folder to use as a root for publishes"
+            },
         }
 
         # update the base settings
@@ -88,6 +104,151 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         ["maya.*", "file.maya"]
         """
         return ["unreal.asset.StaticMesh"]
+
+    def create_settings_widget(self, parent):
+        """
+        Creates a Qt widget, for the supplied parent widget (a container widget
+        on the right side of the publish UI).
+
+        :param parent: The parent to use for the widget being created.
+        :returns: A :class:`QtGui.QFrame` that displays editable widgets for
+                 modifying the plugin's settings.
+        """
+        # defer Qt-related imports
+        from sgtk.platform.qt import QtGui, QtCore
+
+        # Create a QFrame with all our widgets
+        settings_frame = QtGui.QFrame(parent)
+        # Create our widgets, we add them as properties on the QFrame so we can
+        # retrieve them easily. Qt uses camelCase so our xxxx_xxxx names can't
+        # clash with existing Qt properties.
+
+        # Show this plugin description
+        settings_frame.description_label = QtGui.QLabel(self.description)
+        settings_frame.description_label.setWordWrap(True)
+        settings_frame.description_label.setOpenExternalLinks(True)
+        settings_frame.description_label.setTextFormat(QtCore.Qt.RichText)
+
+        # Unreal setttings
+        settings_frame.unreal_publish_folder_label = QtGui.QLabel("Publish folder:")
+        storage_roots = self.parent.shotgun.find(
+            "LocalStorage",
+            [],
+            ["code", _OS_LOCAL_STORAGE_PATH_FIELD]
+        )
+        settings_frame.storage_roots_widget = QtGui.QComboBox()
+        settings_frame.storage_roots_widget.addItem("Current Unreal Project")
+        for storage_root in storage_roots:
+            if storage_root[_OS_LOCAL_STORAGE_PATH_FIELD]:
+                settings_frame.storage_roots_widget.addItem(
+                    "%s (%s)" % (
+                        storage_root["code"],
+                        storage_root[_OS_LOCAL_STORAGE_PATH_FIELD]
+                    ),
+                    userData=storage_root,
+                )
+        # Create the layout to use within the QFrame
+        settings_layout = QtGui.QVBoxLayout()
+        settings_layout.addWidget(settings_frame.description_label)
+        settings_layout.addWidget(settings_frame.unreal_publish_folder_label)
+        settings_layout.addWidget(settings_frame.storage_roots_widget)
+
+        settings_layout.addStretch()
+        settings_frame.setLayout(settings_layout)
+        return settings_frame
+
+    def get_ui_settings(self, widget):
+        """
+        Method called by the publisher to retrieve setting values from the UI.
+
+        :returns: A dictionary with setting values.
+        """
+        # defer Qt-related imports
+        from sgtk.platform.qt import QtCore
+
+        self.logger.info("Getting settings from UI")
+
+        # Please note that we don't have to return all settings here, just the
+        # settings which are editable in the UI.
+        storage_index = widget.storage_roots_widget.currentIndex()
+        publish_folder = None
+        if storage_index > 0:  # Something selected and not the first entry
+            storage = widget.storage_roots_widget.itemData(storage_index, role=QtCore.Qt.UserRole)
+            publish_folder = storage[_OS_LOCAL_STORAGE_PATH_FIELD]
+
+        settings = {
+            "Publish Folder": publish_folder,
+        }
+        return settings
+
+    def set_ui_settings(self, widget, settings):
+        """
+        Method called by the publisher to populate the UI with the setting values.
+
+        :param widget: A QFrame we created in `create_settings_widget`.
+        :param settings: A list of dictionaries.
+        :raises NotImplementedError: if editing multiple items.
+        """
+        # defer Qt-related imports
+        from sgtk.platform.qt import QtCore
+
+        self.logger.info("Setting UI settings")
+        if len(settings) > 1:
+            # We do not allow editing multiple items
+            raise NotImplementedError
+        cur_settings = settings[0]
+        # Note: the template is validated in the accept method, no need to check it here.
+        publish_template_setting = cur_settings.get("Publish Template")
+        publisher = self.parent
+        publish_template = publisher.get_template_by_name(publish_template_setting)
+        if isinstance(publish_template, sgtk.TemplatePath):
+            widget.unreal_publish_folder_label.setEnabled(False)
+            widget.storage_roots_widget.setEnabled(False)
+        folder_index = 0
+        publish_folder = cur_settings["Publish Folder"]
+        if publish_folder:
+            for i in range(widget.storage_roots_widget.count()):
+                data = widget.storage_roots_widget.itemData(i, role=QtCore.Qt.UserRole)
+                if data and data[_OS_LOCAL_STORAGE_PATH_FIELD] == publish_folder:
+                    folder_index = i
+                    break
+            self.logger.debug("Index for %s is %s" % (publish_folder, folder_index))
+        widget.storage_roots_widget.setCurrentIndex(folder_index)
+
+    def load_saved_ui_settings(self, settings):
+        """
+        Load saved settings and update the given settings dictionary with them.
+
+        :param settings: A dictionary where keys are settings names and
+                         values Settings instances.
+        """
+        # Retrieve SG utils framework settings module and instantiate a manager
+        fw = self.load_framework("tk-framework-shotgunutils_v5.x.x")
+        module = fw.import_module("settings")
+        settings_manager = module.UserSettings(self.parent)
+
+        # Retrieve saved settings
+        settings["Publish Folder"].value = settings_manager.retrieve(
+            "publish2.publish_folder",
+            settings["Publish Folder"].value,
+            settings_manager.SCOPE_PROJECT
+        )
+        self.logger.debug("Loaded settings %s" % settings["Publish Folder"])
+
+    def save_ui_settings(self, settings):
+        """
+        Save UI settings.
+
+        :param settings: A dictionary of Settings instances.
+        """
+        # Retrieve SG utils framework settings module and instantiate a manager
+        fw = self.load_framework("tk-framework-shotgunutils_v5.x.x")
+        module = fw.import_module("settings")
+        settings_manager = module.UserSettings(self.parent)
+
+        # Save settings
+        publish_folder = settings["Publish Folder"].value
+        settings_manager.store("publish2.publish_folder", publish_folder, settings_manager.SCOPE_PROJECT)
 
     def accept(self, settings, item):
         """
@@ -132,6 +293,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # for use in subsequent methods
         item.properties["publish_template"] = publish_template
 
+        self.load_saved_ui_settings(settings)
         return {
             "accepted": accepted,
             "checked": True
@@ -172,10 +334,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
             self.logger.debug("Asset path or name not configured.")
             return False
 
-        publish_template = item.properties.get("publish_template")
-        if not publish_template:
-            self.logger.debug("No publish template configured.")
-            return False
+        publish_template = item.properties["publish_template"]
 
         # Add the Unreal asset name to the fields
         fields = {"name": asset_name}
@@ -194,10 +353,22 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # which should be project root + publish template
         publish_path = publish_template.apply_fields(fields)
         publish_path = os.path.normpath(publish_path)
+        if not os.path.isabs(publish_path):
+            # If the path is not absolute, prepend the publish folder setting.
+            publish_folder = settings["Publish Folder"].value
+            if not publish_folder:
+                publish_folder = unreal.Paths.project_saved_dir()
+            publish_path = os.path.abspath(
+                os.path.join(
+                    publish_folder,
+                    publish_path
+                )
+            )
+        item.properties["publish_path"] = publish_path
         item.properties["path"] = publish_path
 
-        # Remove the filename from the work path
-        destination_path = os.path.split(publish_path)[0]
+        # Remove the filename from the publish path
+        destination_path = os.path.dirname(publish_path)
 
         # Stash the destination path in properties
         item.properties["destination_path"] = destination_path
@@ -207,7 +378,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
 
         # run the base class validation
         # return super(UnrealAssetPublishPlugin, self).validate(settings, item)
-
+        self.save_ui_settings(settings)
         return True
 
     def publish(self, settings, item):
