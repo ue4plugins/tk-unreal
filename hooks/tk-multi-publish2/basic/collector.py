@@ -136,7 +136,6 @@ class UnrealSessionCollector(HookBaseClass):
         :param parent_item: Parent Item instance
         """
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
-
         # Iterate through the selected assets and get their info and add them as items to be published
         for asset in unreal_sg.selected_assets:
             asset_name = str(asset.asset_name)
