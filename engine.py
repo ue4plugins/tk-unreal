@@ -88,7 +88,7 @@ class UnrealEditorEngine(Engine):
 
         self.init_qt_app()
 
-        # Load the tk_unreal module (the Shotgun engine wrapper for Unreal)
+        # Load the tk_unreal module (the SG engine wrapper for Unreal)
         self.tk_unreal = self.import_module("tk_unreal")
         self.unreal_sg_engine = self.tk_unreal.config.wrapper_instance
 

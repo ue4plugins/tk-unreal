@@ -28,6 +28,10 @@ class ShotgunEngineWrapper(UESGEngine):
         config.wrapper_instance = self
 
     # Shotgun integration components were renamed to Shotgrid from UE5
+    # these new methods are not available in UE4, we provide backward
+    # compatibility so scripts using the old methods don't break in UE5,
+    # but also forward compatibility, so users can start using the new
+    # names in UE4.
     if hasattr(UESGEngine, "get_shotgrid_menu_items"):
         @unreal.ufunction(override=True)
         def get_shotgrid_menu_items(self):
@@ -47,6 +51,7 @@ class ShotgunEngineWrapper(UESGEngine):
             """
             Provide backward compatibility.
             """
+            unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
             return self.get_shotgrid_menu_items()
     else:
         @unreal.ufunction(override=True)
@@ -59,6 +64,7 @@ class ShotgunEngineWrapper(UESGEngine):
             engine = sgtk.platform.current_engine()
             menu_items = self.create_menu(engine)
 
+            unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
             unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
 
             return menu_items
@@ -74,6 +80,7 @@ class ShotgunEngineWrapper(UESGEngine):
             """
             Provide backward compatibility.
             """
+            unreal.log_warning("get_shotgun_work_dir is deprecated, get_shotgrid_work_dir should be used instead.")
             return self.get_shotgrid_work_dir(*args, **kwargs)
     else:
         def get_shotgrid_work_dir(self, *args, **kwargs):

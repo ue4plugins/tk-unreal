@@ -90,10 +90,17 @@ class EngineLauncher(SoftwareLauncher):
         # Signals which engine instance from the environment is going to be used.
         required_env["SHOTGUN_ENGINE"] = self.engine_name
 
-        # Set the bootstrap location in the environment variable that will be used by the Unreal Shotgun startup script
+        # Set the bootstrap location in the environment variable that will be used by the Unreal Shotgun plugin
+        # startup script
         bootstrap_script = os.path.join(self.disk_location, "plugins", "basic", "bootstrap.py")
+        # From UE5, the UE_SHOTGRID_BOOTSTRAP environment variable is supported.
+        # We still need to support UE_SHOTGUN_BOOTSTRAP for previous UE versions.
         required_env["UE_SHOTGUN_BOOTSTRAP"] = bootstrap_script
-
+        required_env["UE_SHOTGRID_BOOTSTRAP"] = bootstrap_script
+        # UE5 Python ignores PYTHONPATH and only uses UE_PYTHONPATH
+        # blindly copy what was set so modules (e.g. SG TK core) are found
+        # when bootstrapping.
+        required_env["UE_PYTHONPATH"] = os.environ.get("PYTHONPATH") or ""
         self.logger.debug("Executable path: %s", exec_path)
         self.logger.debug("Launch environment: %s", pprint.pformat(required_env))
         self.logger.debug("Launch arguments: %s", args)
