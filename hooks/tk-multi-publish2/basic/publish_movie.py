@@ -756,6 +756,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # Prevent SG TK to try to bootstrap in the new process
         if "UE_SHOTGUN_BOOTSTRAP" in run_env:
             del run_env["UE_SHOTGUN_BOOTSTRAP"]
+        if "UE_SHOTGRID_BOOTSTRAP" in run_env:
+            del run_env["UE_SHOTGRID_BOOTSTRAP"]
 
         subprocess.call(cmdline_args, env=run_env)
 
@@ -896,6 +898,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # Prevent SG TK to try to bootstrap in the new process
         if "UE_SHOTGUN_BOOTSTRAP" in run_env:
             del run_env["UE_SHOTGUN_BOOTSTRAP"]
+        if "UE_SHOTGRID_BOOTSTRAP" in run_env:
+            del run_env["UE_SHOTGRID_BOOTSTRAP"]
         self.logger.info("Running %s" % cmd_args)
         subprocess.call(cmd_args, env=run_env)
         return os.path.isfile(output_path), output_path

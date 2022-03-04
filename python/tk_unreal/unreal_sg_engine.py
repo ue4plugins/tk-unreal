@@ -8,11 +8,18 @@ from . import config
 import sys
 import os
 
-unreal.log("Loading Shotgun Engine for Unreal from {}".format(__file__))
+unreal.log("Loading SG Engine for Unreal from {}".format(__file__))
+
+# Shotgun integration components were renamed to Shotgrid from UE5
+if hasattr(unreal, "ShotgridEngine"):
+    UESGEngine = unreal.ShotgridEngine
+
+else:
+    UESGEngine = unreal.ShotgunEngine
 
 
 @unreal.uclass()
-class ShotgunEngineWrapper(unreal.ShotgunEngine):
+class ShotgunEngineWrapper(UESGEngine):
 
     def _post_init(self):
         """
@@ -20,24 +27,72 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         config.wrapper_instance = self
 
-    @unreal.ufunction(override=True)
-    def get_shotgun_menu_items(self):
-        """
-        Returns the list of available menu items to populate the Shotgun menu in Unreal
-        """
-        menu_items = []
+    # Shotgun integration components were renamed to Shotgrid from UE5
+    # these new methods are not available in UE4, we provide backward
+    # compatibility so scripts using the old methods don't break in UE5,
+    # but also forward compatibility, so users can start using the new
+    # names in UE4.
+    if hasattr(UESGEngine, "get_shotgrid_menu_items"):
+        @unreal.ufunction(override=True)
+        def get_shotgrid_menu_items(self):
+            """
+            Returns the list of available menu items to populate the SG menu in Unreal.
+            """
+            menu_items = []
 
-        engine = sgtk.platform.current_engine()
-        menu_items = self.create_menu(engine)
+            engine = sgtk.platform.current_engine()
+            menu_items = self.create_menu(engine)
 
-        unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
+            unreal.log("get_shotgrid_menu_items returned: {0}".format(menu_items.__str__()))
 
-        return menu_items
+            return menu_items
+
+        def get_shotgun_menu_items(self):
+            """
+            Provide backward compatibility.
+            """
+            unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
+            return self.get_shotgrid_menu_items()
+    else:
+        @unreal.ufunction(override=True)
+        def get_shotgun_menu_items(self):
+            """
+            Returns the list of available menu items to populate the SG menu in Unreal.
+            """
+            menu_items = []
+
+            engine = sgtk.platform.current_engine()
+            menu_items = self.create_menu(engine)
+
+            unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
+            unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
+
+            return menu_items
+
+        def get_shotgrid_menu_items(self):
+            """
+            Provide forward compatibility.
+            """
+            return self.get_shotgun_menu_items()
+
+    if hasattr(UESGEngine, "get_shotgrid_work_dir"):
+        def get_shotgun_work_dir(self, *args, **kwargs):
+            """
+            Provide backward compatibility.
+            """
+            unreal.log_warning("get_shotgun_work_dir is deprecated, get_shotgrid_work_dir should be used instead.")
+            return self.get_shotgrid_work_dir(*args, **kwargs)
+    else:
+        def get_shotgrid_work_dir(self, *args, **kwargs):
+            """
+            Provide forward compatibility.
+            """
+            return self.get_shotgun_work_dir(*args, **kwargs)
 
     @unreal.ufunction(override=True)
     def execute_command(self, command_name):
         """
-        Callback to execute the menu item selected in the Shotgun menu in Unreal
+        Callback to execute the menu item selected in the SG menu in Unreal.
         """
         engine = sgtk.platform.current_engine()
 
@@ -58,9 +113,9 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         :param command_name: The command name to override
         :param default_callback: The callback to use when there's no override
         """
-        # Override the Shotgun Panel command to use the Shotgun Entity context
+        # Override the SG Panel command to use the SG Entity context
         # and also reuse the dialog if one already exists
-        if command_name == "Shotgun Panel...":
+        if command_name in ["Shotgun Panel...", "ShotGrid Panel..."]:
             def show_shotgunpanel_with_context():
                 app = engine.apps["tk-multi-shotgunpanel"]
                 entity_type, entity_id = self._get_context(engine)
@@ -75,7 +130,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
     def _get_context_url(self, engine):
         """
-        Get the Shotgun entity URL from the metadata of the selected asset, if present
+        Get the SG entity URL from the metadata of the selected asset, if present.
         """
         # By default, use the URL of the project
         url = engine.context.shotgun_url
@@ -110,12 +165,12 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
     def _get_context(self, engine):
         """
-        Get the Shotgun context (entity type and id) that is associated with the selected menu command
+        Get the SG context (entity type and id) that is associated with the selected menu command.
         """
         entity_type = None
         entity_id = None
 
-        # The context is derived from the Shotgun entity URL
+        # The context is derived from the SG entity URL
         url = self._get_context_url(engine)
         if url:
             # Extract entity type and id from URL, which should follow this pattern:
@@ -173,7 +228,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
         engine = sgtk.platform.current_engine()
         if engine is not None:
-            unreal.log("Shutting down ShotgunEngineWrapper")
+            unreal.log("Shutting down %s" % self.__class__.__name__)
 
             # destroy_engine of tk-unreal will take care of closing all dialogs that are still opened
             engine.destroy()
@@ -184,12 +239,12 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
     Menu generation functionality for Unreal (based on the 3ds max Menu Generation implementation)
 
     Actual menu creation is done in Unreal
-    The following functions simply generate a list of available commands that will populate the Shotgun menu in Unreal
+    The following functions simply generate a list of available commands that will populate the SG menu in Unreal
     """
 
     def create_menu(self, engine):
         """
-        Populate the Shotgun Menu with the available commands
+        Populate the SG Menu with the available commands.
         """
         menu_items = []
 
@@ -257,9 +312,13 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
     def _add_menu_item(self, menu_items, type, name="", title="", description=""):
         """
-        Adds a new Unreal ShotgunMenuItem to the menu items
+        Adds a new Unreal SG MenuItem to the menu items.
         """
-        menu_item = unreal.ShotgunMenuItem()
+        # Shotgun integration components were renamed to Shotgrid from UE5
+        if hasattr(unreal, "ShotgridMenuItem"):
+            menu_item = unreal.ShotgridMenuItem()
+        else:
+            menu_item = unreal.ShotgunMenuItem()
         menu_item.title = title
         menu_item.name = name
         menu_item.type = type
@@ -275,15 +334,23 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
 
         self._add_menu_item(menu_items, "context_begin", ctx_name, ctx_name)
 
-        engine.register_command("Jump to Shotgun", self._jump_to_sg, {"type": "context_menu", "short_name": "jump_to_sg"})
+        engine.register_command(
+            "Jump to ShotGrid",
+            self._jump_to_sg,
+            {"type": "context_menu", "short_name": "jump_to_sg"}
+        )
 
         # Add the menu item only when there are some file system locations.
         if ctx.filesystem_locations:
-            engine.register_command("Jump to File System", self._jump_to_fs, {"type": "context_menu", "short_name": "jump_to_fs"})
+            engine.register_command(
+                "Jump to File System",
+                self._jump_to_fs,
+                {"type": "context_menu", "short_name": "jump_to_fs"}
+            )
 
     def _jump_to_sg(self):
         """
-        Callback to Jump to Shotgun from context
+        Callback to Jump to SG from context.
         """
         from sgtk.platform.qt5 import QtGui, QtCore
         url = self._get_context_url(sgtk.platform.current_engine())

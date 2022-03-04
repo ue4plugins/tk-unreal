@@ -68,8 +68,11 @@ def _on_engine_initialized():
     sgtk_logger.debug("tk-unreal finished initialization.")
 
     import unreal
-
-    unreal.ShotgunEngine.get_instance().on_engine_initialized()
+    # ShotgunEngine was renamed to ShotgridEngine from UE5
+    if hasattr(unreal, "ShotgridEngine"):
+        unreal.ShotgridEngine.get_instance().on_engine_initialized()
+    else:
+        unreal.ShotgunEngine.get_instance().on_engine_initialized()
 
 
 def _initialize_manager(plugin_root_path):
@@ -87,7 +90,7 @@ def _initialize_manager(plugin_root_path):
 
     # open the yaml file and read the data
     with open(plugin_info_yml, "r") as plugin_info_fh:
-        plugin_info = yaml.load(plugin_info_fh)
+        plugin_info = yaml.load(plugin_info_fh, yaml.SafeLoader)
 
     base_config = plugin_info["base_configuration"]
     plugin_id = plugin_info["plugin_id"]

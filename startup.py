@@ -6,6 +6,7 @@ import os
 import sys
 import pprint
 import json
+import re
 
 import sgtk
 from sgtk.platform import SoftwareLauncher, SoftwareVersion, LaunchInformation
@@ -89,10 +90,17 @@ class EngineLauncher(SoftwareLauncher):
         # Signals which engine instance from the environment is going to be used.
         required_env["SHOTGUN_ENGINE"] = self.engine_name
 
-        # Set the bootstrap location in the environment variable that will be used by the Unreal Shotgun startup script
+        # Set the bootstrap location in the environment variable that will be used by the Unreal Shotgun plugin
+        # startup script
         bootstrap_script = os.path.join(self.disk_location, "plugins", "basic", "bootstrap.py")
+        # From UE5, the UE_SHOTGRID_BOOTSTRAP environment variable is supported.
+        # We still need to support UE_SHOTGUN_BOOTSTRAP for previous UE versions.
         required_env["UE_SHOTGUN_BOOTSTRAP"] = bootstrap_script
-
+        required_env["UE_SHOTGRID_BOOTSTRAP"] = bootstrap_script
+        # UE5 Python ignores PYTHONPATH and only uses UE_PYTHONPATH
+        # blindly copy what was set so modules (e.g. SG TK core) are found
+        # when bootstrapping.
+        required_env["UE_PYTHONPATH"] = os.environ.get("PYTHONPATH") or ""
         self.logger.debug("Executable path: %s", exec_path)
         self.logger.debug("Launch environment: %s", pprint.pformat(required_env))
         self.logger.debug("Launch arguments: %s", args)
@@ -148,6 +156,7 @@ class EngineLauncher(SoftwareLauncher):
         Find installed UE executable.
 
         :returns: List of :class:`SoftwareVersion` instances.
+        :raises RuntimeError: For unsupported OSes.
         """
         self.logger.info("Finding Unreal Engine executables")
         sw_versions = []
@@ -161,34 +170,42 @@ class EngineLauncher(SoftwareLauncher):
         elif sgtk.util.is_linux():
             executable_templates = self.EXECUTABLE_TEMPLATES.get("linux")
 
-        if executable_templates:
-            for executable_template in executable_templates:
-                self.logger.debug("Processing template %s.", executable_template)
-                executable_matches = self._glob_and_match(
-                    executable_template, self.COMPONENT_REGEX_LOOKUP
-                )
-                # Extract all products from that executable.
-                for (executable_path, key_dict) in executable_matches:
-                    # extract the matched keys form the key_dict (default to None if
-                    # not included)
-                    executable_version = key_dict.get("version")
-                    details = self._get_unreal_version_details(executable_path)
-                    if details and all(x in details for x in ["MajorVersion", "MinorVersion", "PatchVersion"]):
-                        executable_version = "%s.%s.%s" % (
-                            details["MajorVersion"],
-                            details["MinorVersion"],
-                            details["PatchVersion"],
-                        )
-                    sw_versions.append(
-                        SoftwareVersion(
-                            executable_version,
-                            "Unreal Engine",
-                            executable_path,
-                            os.path.join(self.disk_location, "icon_256.png"),
-                        )
-                    )
-        else:
+        if not executable_templates:
             raise RuntimeError("Unsupported platform %s" % sys.platform)
+
+        for executable_template in executable_templates:
+            self.logger.debug("Processing template %s.", executable_template)
+            executable_matches = self._glob_and_match(
+                executable_template, self.COMPONENT_REGEX_LOOKUP
+            )
+            # Extract all products from that executable.
+            for (executable_path, key_dict) in executable_matches:
+                # extract the matched keys form the key_dict (default to None if
+                # not included)
+                executable_version = key_dict.get("version")
+                details = self._get_unreal_version_details(executable_path)
+                if details and all(x in details for x in ["MajorVersion", "MinorVersion", "PatchVersion"]):
+                    executable_version = "%s.%s.%s" % (
+                        details["MajorVersion"],
+                        details["MinorVersion"],
+                        details["PatchVersion"],
+                    )
+                sw_versions.append(
+                    SoftwareVersion(
+                        executable_version,
+                        "Unreal Engine",
+                        executable_path,
+                        os.path.join(self.disk_location, "icon_256.png"),
+                    )
+                )
+        if sgtk.util.is_windows():
+            # On Windows we also explore registry, but make sure to not add
+            # things twice.
+            found_paths = [sw.path for sw in sw_versions]
+            for sw in self._find_software_from_registry():
+                if sw.path not in found_paths:
+                    sw_versions.append(sw)
+                    found_paths.append(sw.path)
 
         return sw_versions
 
@@ -208,3 +225,118 @@ class EngineLauncher(SoftwareLauncher):
             with open(full_path) as pf:
                 version_details = json.load(pf)
         return version_details
+
+    def _get_unreal_version(self, executable_path):
+        """
+        Return the Unreal Editor version for the given executable.
+
+        :returns: A potentially empty version string.
+        """
+        details = self._get_unreal_version_details(executable_path)
+        if details and all(x in details for x in ["MajorVersion", "MinorVersion", "PatchVersion"]):
+            return "%s.%s.%s" % (
+                details["MajorVersion"],
+                details["MinorVersion"],
+                details["PatchVersion"],
+            )
+        # Fall back on parsing the executable path
+        # Look for ue_4.7, ue_4.7.2, etc..
+        for part in executable_path.lower().split(os.path.sep):
+            m = re.match(r"ue_([0-9]+(?:\.[0-9]+)*)$", part)
+            if m:
+                return m.group(1)
+        return ""
+
+    def _get_win_executable_path(self, install_path):
+        """
+        Return the Unreal Editor exe path for the given install path, if one
+        exists.
+
+        Check if the executable exists on the filesystem.
+        :returns: A string, full path to the Unreal editor executable or ``None``.
+        """
+        binary_path = os.path.normpath(
+            os.path.join(install_path, "Engine", "Binaries", "Win64")
+        )
+        exec_path = os.path.join(binary_path, "UE4Editor.exe")
+        if os.path.exists(exec_path):
+            self.logger.info("Found %s" % exec_path)
+            return exec_path
+        # From UE5, the exe name changed
+        exec_path = os.path.join(binary_path, "UnrealEditor.exe")
+        if os.path.exists(exec_path):
+            self.logger.info("Found %s" % exec_path)
+            return exec_path
+
+        self.logger.info(
+            "Couldn't find executable in installation path %s" % install_path
+        )
+        return None
+
+    def _find_software_from_registry(self):
+        """
+        Find executables in the Windows Registry.
+
+        :returns: List of :class:`SoftwareVersion` instances.
+        """
+        self.logger.info("Detecting Unreal Engine from registry...")
+        try:
+            # Note: keeping this as is, without knowing why it was implemented
+            # like that, instead of just doing import winreg
+            import _winreg
+        except ImportError:
+            import winreg as _winreg
+
+        self.logger.debug(
+            "Querying windows registry for key HKEY_LOCAL_MACHINE\\SOFTWARE\\EpicGames\\Unreal Engine"
+        )
+        base_key_name = "SOFTWARE\\EpicGames\\Unreal Engine"
+        # find all subkeys in key HKEY_LOCAL_MACHINE\SOFTWARE\EpicGames\Unreal Engine
+        sw_versions = []
+        try:
+            key = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, base_key_name)
+            sub_key_count = _winreg.QueryInfoKey(key)[0]
+            for i in range(sub_key_count):
+                sub_key_name = _winreg.EnumKey(key, i)
+                sub_key = _winreg.OpenKey(key, sub_key_name)
+                values_count = _winreg.QueryInfoKey(sub_key)[1]
+                if sub_key_name == "Builds":
+                    for j in range(values_count):
+                        value = _winreg.EnumValue(sub_key, j)[1]
+                        self.logger.info("Checking %s" % value)
+                        if value and os.path.exists(value):
+                            executable_path = self._get_win_executable_path(value)
+                            if executable_path:
+                                sw = SoftwareVersion(
+                                    self._get_unreal_version(executable_path),
+                                    "Unreal Engine (Dev Build)",
+                                    executable_path,
+                                    os.path.join(self.disk_location, "icon_256.png")
+                                )
+                                sw_versions.append(sw)
+                else:
+                    for j in range(values_count):
+                        value_name, value, _ = _winreg.EnumValue(sub_key, j)
+                        if value_name == "InstalledDirectory":
+                            if value and os.path.exists(value):
+                                executable_path = self._get_win_executable_path(value)
+                                if executable_path:
+                                    sw = SoftwareVersion(
+                                        self._get_unreal_version(executable_path),
+                                        "Unreal Engine",
+                                        executable_path,
+                                        os.path.join(self.disk_location, "icon_256.png")
+                                    )
+                                    sw_versions.append(sw)
+
+                            break
+            _winreg.CloseKey(key)
+        except WindowsError as e:
+            self.logger.error("Error handling key %s: %s" % (base_key_name, e))
+            # Log the traceback in debug
+            self.logger.debug(
+                "Error opening key %s: %s" % (base_key_name, e),
+                exc_info=True
+            )
+
+        return sw_versions
