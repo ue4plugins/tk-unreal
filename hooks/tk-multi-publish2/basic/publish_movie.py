@@ -383,7 +383,20 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         if not asset_path or not asset_name:
             self.logger.debug("Sequence path or name not configured.")
             return False
+        # Retrieve the Level Sequences sections tree for this Level Sequence.
+        # This is needed to get frame ranges in the "edit" context.
+        edits_path = item.properties.get("edits_path")
+        if not edits_path:
+            self.logger.debug("Edits path not configured.")
+            return False
 
+        self.logger.info("Edits path %s" % edits_path)
+        item.properties["unreal_master_sequence"] = edits_path[0]
+        item.properties["unreal_shot"] = ".".join([lseq.get_name() for lseq in edits_path[1:]])
+        self.logger.info("Master sequence %s, shot %s" % (
+            item.properties["unreal_master_sequence"].get_name(),
+            item.properties["unreal_shot"] or "all shots",
+        ))
         # Get the configured publish template
         publish_template = item.properties["publish_template"]
 
@@ -415,10 +428,14 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             self.logger.debug("Current map must be saved first.")
             return False
 
-        # Add the map name and level sequence to fields
+        # Add the map name to fields
         world_name = unreal_map.get_name()
+        # Add the Level Sequence to fields, with the shot if any
         fields["ue_world"] = world_name
-        fields["ue_level_sequence"] = asset_name
+        if len(edits_path) > 1:
+            fields["ue_level_sequence"] = "%s_%s" % (edits_path[0].get_name(), edits_path[-1].get_name())
+        else:
+            fields["ue_level_sequence"] = edits_path[0].get_name()
 
         # Stash the level sequence and map paths in properties for the render
         item.properties["unreal_asset_path"] = asset_path
@@ -453,8 +470,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                     "Apple ProRes Media plugin must be loaded to be able to render with the Movie Render Queue, "
                     "Level Sequencer will be used for rendering."
                 )
-        else:
+
+        if not use_movie_render_queue:
+            if item.properties["unreal_shot"]:
+                raise ValueError("Rendering invidual shots for a sequence is only supported with the Movie Render Queue.")
             self.logger.info("Movie Render Queue not available, Level Sequencer will be used for rendering.")
+
         item.properties["use_movie_render_queue"] = use_movie_render_queue
         item.properties["movie_render_queue_presets"] = render_presets
         # Set the UE movie extension based on the current platform and rendering engine
@@ -554,7 +575,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
                 publish_path,
                 unreal_map_path,
                 unreal_asset_path,
-                presets
+                presets,
+                item.properties.get("unreal_shot") or None,
             )
         else:
             self.logger.info("Rendering %s with the Level Sequencer." % publish_path)
@@ -763,7 +785,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         return os.path.isfile(output_path), output_path
 
-    def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path, presets=None):
+    def _unreal_render_sequence_with_movie_queue(self, output_path, unreal_map_path, sequence_path, presets=None, shot_name=None):
         """
         Renders a given sequence in a given level with the Movie Render queue.
 
@@ -771,8 +793,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         :param str unreal_map_path: Path of the Unreal map in which to run the sequence.
         :param str sequence_path: Content Browser path of sequence to render.
         :param presets: Optional :class:`unreal.MoviePipelineMasterConfig` instance to use for renderig.
+        :param str shot_name: Optional shot name to render a single shot from this sequence.
         :returns: True if a movie file was generated, False otherwise
                   string representing the path of the generated movie file
+        :raises ValueError: If a shot name is specified but can't be found in
+                            the sequence.
         """
         output_folder, output_file = os.path.split(output_path)
         movie_name = os.path.splitext(output_file)[0]
@@ -782,6 +807,19 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         job = queue.allocate_new_job(unreal.MoviePipelineExecutorJob)
         job.sequence = unreal.SoftObjectPath(sequence_path)
         job.map = unreal.SoftObjectPath(unreal_map_path)
+        # If a specific shot was given, disable all the others.
+        if shot_name:
+            shot_found = False
+            for shot in job.shot_info:
+                if shot.outer_name != shot_name:
+                    self.logger.info("Disabling shot %s" % shot.outer_name)
+                    shot.enabled = False
+                else:
+                    shot_found = True
+            if not shot_found:
+                raise ValueError(
+                    "Unable to find shot %s in sequence %s, aborting..." % (shot_name, sequence_path)
+                )
         # Set settings from presets, if any
         if presets:
             job.set_preset_origin(presets)
@@ -823,6 +861,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # We can't control the name of the manifest file, so we save and then rename the file.
         _, manifest_path = unreal.MoviePipelineEditorLibrary.save_queue_to_manifest_file(queue)
+
         manifest_path = os.path.abspath(manifest_path)
         manifest_dir, manifest_file = os.path.split(manifest_path)
         f, new_path = tempfile.mkstemp(
@@ -893,6 +932,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             # This need to be a path relative the to the Unreal project "Saved" folder.
             "-MoviePipelineConfig=\"%s\"" % manifest_path,
         ]
+        unreal.log(
+            "Movie Queue command-line arguments: {}".format(
+                " ".join(cmd_args)
+            )
+        )
         # Make a shallow copy of the current environment and clear some variables
         run_env = copy.copy(os.environ)
         # Prevent SG TK to try to bootstrap in the new process

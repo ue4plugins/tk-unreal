@@ -2,8 +2,17 @@
 # This file has been modified by Epic Games, Inc. and is subject to the license
 # file included in this repository.
 
-import sgtk
+from collections import namedtuple, defaultdict
+import copy
 import os
+
+import unreal
+
+import sgtk
+
+# A named tuple to store LevelSequence edits: the sequence/track/section
+# the edit is in.
+SequenceEdit = namedtuple("SequenceEdit", ["sequence", "track", "section"])
 
 
 HookBaseClass = sgtk.get_hook_baseclass()
@@ -129,6 +138,29 @@ class UnrealSessionCollector(HookBaseClass):
 
         return session_item
 
+    def create_asset_item(self, parent_item, asset_path, asset_type, asset_name, display_name=None):
+        """
+        Create an unreal item under the given parent item.
+
+        :param asset_path: The unreal asset path, as a string.
+        :param asset_type: The unreal asset type, as a string.
+        :param asset_name: The unreal asset name, as a string.
+        :param display_name: Optional display name for the item.
+        :returns: The created item.
+        """
+        item_type = "unreal.asset.%s" % asset_type
+        asset_item = parent_item.create_item(
+            item_type,  # Include the asset type for the publish plugin to use
+            asset_type,  # Display type
+            display_name or asset_name,  # Display name of item instance
+        )
+
+        # Set asset properties which can be used by publish plugins
+        asset_item.properties["asset_path"] = asset_path
+        asset_item.properties["asset_name"] = asset_name
+        asset_item.properties["asset_type"] = asset_type
+        return asset_item
+
     def collect_selected_assets(self, parent_item):
         """
         Creates items for assets selected in Unreal.
@@ -136,19 +168,140 @@ class UnrealSessionCollector(HookBaseClass):
         :param parent_item: Parent Item instance
         """
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
+        sequence_edits = None
         # Iterate through the selected assets and get their info and add them as items to be published
         for asset in unreal_sg.selected_assets:
-            asset_name = str(asset.asset_name)
-            asset_type = str(asset.asset_class)
+            if asset.asset_class == "LevelSequence":
+                if sequence_edits is None:
+                    sequence_edits = self.retrieve_sequence_edits()
+                self.collect_level_sequence(parent_item, asset, sequence_edits)
+            else:
+                self.create_asset_item(
+                    parent_item,
+                    # :class:`Name` instances, we cast them to strings otherwise
+                    # string operations fail down the line..
+                    "%s" % asset.object_path,
+                    "%s" % asset.asset_class,
+                    "%s" % asset.asset_name,
+                )
 
-            item_type = "unreal.asset." + asset_type
-            asset_item = parent_item.create_item(
-                item_type,     # Include the asset type for the publish plugin to use
-                asset_type,    # display type
-                asset_name     # display name of item instance
+    def get_all_paths_from_sequence(self, level_sequence, sequence_edits, visited=None):
+        """
+        Retrieve all edit paths from the given Level Sequence to top Level Sequences.
+
+        Recursively explore the sequence edits, stop the recursion when a Level
+        Sequence which is not a sub-sequence of another is reached.
+
+        Lists of Level Sequences are returned, where each list contains all the
+        the Level Sequences to traverse to reach the top Level Sequence from the
+        starting Level Sequence.
+
+        For example if a master Level Sequence contains some `Seq_<seq number>`
+        sequences and each of them contains shots like `Shot_<seq number>_<shot number>`,
+        a path for Shot_001_010 would be `[Shot_001_010, Seq_001, Master sequence]`.
+
+        If an alternate Cut is maintained with another master level Sequence, both
+        paths would be detected and returned by this method, e.g.
+        `[[Shot_001_010, Seq_001, Master sequence], [Shot_001_010, Seq_001, Master sequence 2]]`
+
+        Maintain a list of visited Level Sequences to detect cycles.
+
+        :param level_sequence: A :class:`unreal.LevelSequence` instance.
+        :param sequence_edits: A dictionary with  :class:`unreal.LevelSequence as keys and
+                                              lists of :class:`SequenceEdit` as values.
+        :param visited: A list of :class:`unreal.LevelSequence` instances, populated
+                        as nodes are visited.
+        :returns: A list of lists of Level Sequences.
+        """
+        if not visited:
+            visited = []
+        visited.append(level_sequence)
+        self.logger.info("Treating %s" % level_sequence.get_name())
+        if not sequence_edits[level_sequence]:
+            # No parent, return a list with a single entry with the current
+            # sequence
+            return [[level_sequence]]
+
+        all_paths = []
+        # Loop over parents get all paths starting from them
+        for edit in sequence_edits[level_sequence]:
+            if edit.sequence in visited:
+                self.logger.warning(
+                    "Detected a cycle in edits path %s to %s" % (
+                        "->".join(visited), edit.sequence
+                    )
+                )
+            else:
+                # Get paths from the parent and prepend the current sequence
+                # to them.
+                for edit_path in self.get_all_paths_from_sequence(
+                    edit.sequence,
+                    sequence_edits,
+                    copy.copy(visited),  # Each visit needs its own stack
+                ):
+                    self.logger.info("Got %s from %s" % (edit_path, edit.sequence.get_name()))
+                    all_paths.append([level_sequence] + edit_path)
+        return all_paths
+
+    def collect_level_sequence(self, parent_item, asset, sequence_edits):
+        """
+        Collect the items for the given Level Sequence asset.
+
+        Multiple items can be collected for a given Level Sequence if it appears
+        in multiple edits.
+
+        :param parent_item: Parent Item instance.
+        :param asset: An Unreal LevelSequence asset.
+        :param sequence_edits: A dictionary with  :class:`unreal.LevelSequence as keys and
+                                              lists of :class:`SequenceEdit` as values.
+        """
+        level_sequence = unreal.load_asset(asset.object_path)
+        for edits_path in self.get_all_paths_from_sequence(level_sequence, sequence_edits):
+            # Reverse the path to have it from top master sequence to the shot.
+            edits_path.reverse()
+            self.logger.info("Collected %s" % [x.get_name() for x in edits_path])
+            if len(edits_path) > 1:
+                display_name = "%s (%s)" % (edits_path[0].get_name(), edits_path[-1].get_name())
+            else:
+                display_name = edits_path[0].get_name()
+            item = self.create_asset_item(
+                parent_item,
+                edits_path[0].get_path_name(),
+                "LevelSequence",
+                edits_path[0].get_name(),
+                display_name,
             )
+            # Store the edits on the item so we can leverage them later when
+            # publishing.
+            item.properties["edits_path"] = edits_path
 
-            # Asset properties that can be used by publish plugins
-            asset_item.properties["asset_path"] = asset.object_path
-            asset_item.properties["asset_name"] = asset_name
-            asset_item.properties["asset_type"] = asset_type
+    def retrieve_sequence_edits(self):
+        """
+        Build a dictionary for all Level Sequences where keys are Level Sequences
+        and values the list of edits they are in.
+
+        :returns: A dictionary of :class:`unreal.LevelSequence` where values are
+                  lists of :class:`SequenceEdit`.
+        """
+        sequence_edits = defaultdict(list)
+
+        asset_helper = unreal.AssetRegistryHelpers.get_asset_registry()
+        # Retrieve all Level Sequence assets
+        all_level_sequences = asset_helper.get_assets_by_class("LevelSequence")
+        for lvseq_asset in all_level_sequences:
+            lvseq = unreal.load_asset(lvseq_asset.object_path, unreal.LevelSequence)
+            # Check shots
+            for track in lvseq.find_master_tracks_by_type(unreal.MovieSceneCinematicShotTrack):
+                for section in track.get_sections():
+                    # Not sure if you can have anything else than a MovieSceneSubSection
+                    # in a MovieSceneCinematicShotTrack, but let's be cautious here.
+                    try:
+                        # Get the Sequence attached to the section and check if
+                        # it is the one we're looking for.
+                        section_seq = section.get_sequence()
+                        sequence_edits[section_seq].append(
+                            SequenceEdit(lvseq, track, section)
+                        )
+                    except AttributeError:
+                        pass
+        return sequence_edits
