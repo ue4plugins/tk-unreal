@@ -8,10 +8,10 @@ from . import config
 import sys
 import os
 
-unreal.log("Loading Shotgun Engine for Unreal from {}".format(__file__))
+unreal.log("Loading Shotgrid Engine for Unreal from {}".format(__file__))
 
 @unreal.uclass()
-class ShotgunEngineWrapper(unreal.ShotgunEngine):
+class ShotgridEngineWrapper(unreal.ShotgridEngine):
 
     def _post_init(self):
         """
@@ -20,23 +20,23 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         config.wrapper_instance = self
         
     @unreal.ufunction(override=True)
-    def get_shotgun_menu_items(self):
+    def get_shotgrid_menu_items(self):
         """
-        Returns the list of available menu items to populate the Shotgun menu in Unreal
+        Returns the list of available menu items to populate the Shotgrid menu in Unreal
         """
         menu_items = []
         
         engine = sgtk.platform.current_engine()
         menu_items = self.create_menu(engine)
 
-        unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
+        unreal.log("get_shotgrid_menu_items returned: {0}".format(menu_items.__str__()))
 
         return menu_items
 
     @unreal.ufunction(override=True)
     def execute_command(self, command_name):
         """
-        Callback to execute the menu item selected in the Shotgun menu in Unreal
+        Callback to execute the menu item selected in the Shotgrid menu in Unreal
         """
         engine = sgtk.platform.current_engine()
 
@@ -255,7 +255,7 @@ class ShotgunEngineWrapper(unreal.ShotgunEngine):
         """
         Adds a new Unreal ShotgunMenuItem to the menu items
         """
-        menu_item = unreal.ShotgunMenuItem()
+        menu_item = unreal.ShotgridMenuItem()
         menu_item.title = title
         menu_item.name = name
         menu_item.type = type
