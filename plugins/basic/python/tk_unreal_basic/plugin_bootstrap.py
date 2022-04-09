@@ -47,7 +47,7 @@ def bootstrap_plugin(plugin_root_path):
 
     # synchronous
     manager.bootstrap_engine(
-        os.environ.get("SHOTGRID_ENGINE", "tk-unreal"),
+        os.environ.get("SHOTGUN_ENGINE", "tk-unreal"),
         manager.get_entity_from_environment()
     )
     _on_engine_initialized()
