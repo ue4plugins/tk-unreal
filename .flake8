@@ -1,0 +1,44 @@
+# Flake 8 PEP and lint configuration - https://gitlab.com/pycqa/flake8
+#
+# This defines the official lint and PEP8 rules for this repository
+#
+# You can run this locally by running 'pip install flake8' and then
+# >flake8 .
+
+[flake8]
+
+# Things we don't want to lint
+exclude =
+    .tox,
+    .git,
+    .flake8,
+    .gitignore,
+    .travis.yml,
+    .cache,
+    .eggs,
+    *.rst,
+    *.yml,
+    *.pyc,
+    *.pyo,
+    *.egg-info,
+    __pycache__,
+    # Those are our third parties, do not lint them
+    vendors,
+    # Skip __init__.py files, to not have a lot of 'xxx' imported but unused
+    python/__init__.py,
+    python/*/__init__.py,
+    # Skip the auto-generated ui file.
+    python/*/ui,
+    venv
+    winenv
+
+# Ignore some errors
+#
+# E402 module level import not at top of file
+# E501 line too long (112 > 79 characters)
+# N802 Variables should be lower case. (clashes with Qt naming conventions)
+# N806 Variables should be lower case. (clashes with Qt naming conventions)
+# W503 line break before binary operator (it breaks before, not after)
+
+ignore = E501, E402, N802, N806, W503
+

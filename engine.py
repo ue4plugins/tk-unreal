@@ -1,5 +1,5 @@
 # This file is based on templates provided and copyrighted by Autodesk, Inc.
-# This file has been modified by Epic Games, Inc. and is subject to the license 
+# This file has been modified by Epic Games, Inc. and is subject to the license
 # file included in this repository.
 
 """
@@ -27,21 +27,10 @@ import sys
 class UnrealEditorEngine(Engine):
     """
     Toolkit engine for Unreal.
-
-    All the methods that are present are either stubs or example of the expected functionality.
-
-    Note that when the engine starts up a log file is created at
-
-    Windows: %APPDATA%\Shotgun\logs\tk-unreal.log
-    macOS: ~/Library/Logs/Shotgun/tk-unreal.log
-    Linux: ~/.shotgun/logs/tk-unreal.log
-
-    and that all logging calls to Toolkit logging methods will be forwarded there.
-    It all uses the Python's logger under the hood.
     """
 
     metadata_tag_prefix = "SG."
-    
+
     def __init__(self, *args, **kwargs):
         """
         Engine Constructor
@@ -99,7 +88,7 @@ class UnrealEditorEngine(Engine):
 
         self.init_qt_app()
 
-        # Load the tk_unreal module (the Shotgun engine wrapper for Unreal)
+        # Load the tk_unreal module (the SG engine wrapper for Unreal)
         self.tk_unreal = self.import_module("tk_unreal")
         self.unreal_sg_engine = self.tk_unreal.config.wrapper_instance
 
@@ -117,19 +106,36 @@ class UnrealEditorEngine(Engine):
 
     def init_qt_app(self):
         self.logger.debug("%s: Initializing QtApp for Unreal", self)
-
         from sgtk.platform.qt5 import QtWidgets
-        
+
         if not QtWidgets.QApplication.instance():
             self._qt_app = QtWidgets.QApplication(sys.argv)
             self._qt_app.setQuitOnLastWindowClosed(False)
-            unreal.log("Created QApplication instance: {0}".format(self._qt_app))
         else:
             self._qt_app = QtWidgets.QApplication.instance()
 
+        # On other platforms than Windows, we need to process the Qt events otherwise
+        # UIs are "frozen". We use a slate tick callback to do that on a regular basis.
+        # It is not clear why this is not needed on Windows, possibly because a
+        # dedicated Windows event dispatcher is used instead of a regular
+        # QAbstractEventDispatcher
+        if sys.platform != "win32":
+            unreal.register_slate_post_tick_callback(self._process_qt_events_cb)
         # Make the QApplication use the dark theme. Must be called after the QApplication is instantiated
         self._initialize_dark_look_and_feel()
-            
+
+    @staticmethod
+    def _process_qt_events_cb(delta_time):
+        """
+        An Unreal tick callback to process QT events.
+
+        :param float delta_time: delta time since the last run.
+        """
+        from sgtk.platform.qt5 import QtWidgets
+        qapp = QtWidgets.QApplication.instance()
+        if qapp:
+            qapp.processEvents()
+
     def post_app_init(self):
         """
         Called when all apps have initialized
@@ -214,10 +220,10 @@ class UnrealEditorEngine(Engine):
         """
         self.logger.debug("%s: Destroying tk-unreal engine...", self)
 
-        # Close all Shotgun app dialogs that are still opened since 
+        # Close all Shotgun app dialogs that are still opened since
         # some apps do threads cleanup in their onClose event handler
         # Note that this function is called when the engine is restarted (through "Reload Engine and Apps")
-        
+
         # Important: Copy the list of dialogs still opened since the call to close() will modify created_qt_dialogs
         dialogs_still_opened = self.created_qt_dialogs[:]
 
@@ -229,7 +235,7 @@ class UnrealEditorEngine(Engine):
         Returns the given tag with the metadata tag prefix defined for this engine
         """
         return UnrealEditorEngine.metadata_tag_prefix + tag
-        
+
     def _get_dialog_parent(self):
         """
         Get the QWidget parent for all dialogs created through
@@ -259,17 +265,18 @@ class UnrealEditorEngine(Engine):
         Function override to set the window icon
         """
         dialog = sgtk.platform.Engine._create_dialog(self, title, bundle, widget, parent)
-        
+
         from sgtk.platform.qt import QtGui
 
-        unreal_icon = os.path.realpath(os.path.join(
-            os.path.dirname(__file__),
-            "icon_256.png"))
-            
+        unreal_icon = os.path.realpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "icon_256.png"
+            )
+        )
         dialog.setWindowIcon(QtGui.QIcon(unreal_icon))
-
         return dialog
-        
+
     def _define_qt_base(self):
         """
         This will be called at initialisation time and will allow
