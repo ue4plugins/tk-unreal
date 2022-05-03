@@ -8,14 +8,15 @@ from . import config
 import sys
 import os
 
-
 unreal.log("Loading SG Engine for Unreal from {}".format(__file__))
 
 # Shotgun integration components were renamed to Shotgrid from UE5
 if hasattr(unreal, "ShotgridEngine"):
     UESGEngine = unreal.ShotgridEngine
+
 else:
     UESGEngine = unreal.ShotgunEngine
+
 
 @unreal.uclass()
 class ShotgunEngineWrapper(UESGEngine):
@@ -313,13 +314,11 @@ class ShotgunEngineWrapper(UESGEngine):
         """
         Adds a new Unreal SG MenuItem to the menu items.
         """
-
         # Shotgun integration components were renamed to Shotgrid from UE5
         if hasattr(unreal, "ShotgridMenuItem"):
             menu_item = unreal.ShotgridMenuItem()
         else:
             menu_item = unreal.ShotgunMenuItem()
-
         menu_item.title = title
         menu_item.name = name
         menu_item.type = type

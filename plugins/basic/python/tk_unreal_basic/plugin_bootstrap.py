@@ -68,12 +68,12 @@ def _on_engine_initialized():
     sgtk_logger.debug("tk-unreal finished initialization.")
 
     import unreal
-
     # ShotgunEngine was renamed to ShotgridEngine from UE5
     if hasattr(unreal, "ShotgridEngine"):
         unreal.ShotgridEngine.get_instance().on_engine_initialized()
     else:
         unreal.ShotgunEngine.get_instance().on_engine_initialized()
+
 
 def _initialize_manager(plugin_root_path):
     """
