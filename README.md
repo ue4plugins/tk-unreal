@@ -66,5 +66,5 @@ Then the following files (or similar) need to be modified to add the Unreal inte
 
 
 ## See also:
-For more information on how to run the ShotGrid/Unreal integration, please see the [support documentation](https://docs.unrealengine.com/4.27/en-US/ProductionPipelines/UsingUnrealEnginewithAutodeskShotGrid).
+For more information on how to run the ShotGrid/Unreal integration, please see the [support documentation](https://docs.unrealengine.com/5.0/en-US/using-unreal-engine-with-autodesk-shotgrid/).
 
