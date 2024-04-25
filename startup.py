@@ -72,7 +72,7 @@ class EngineLauncher(SoftwareLauncher):
         # SG TK integration for now, just run the executable with its args. This
         # allows to launch Unreal from tk-desktop or submit turntable renders
         # from Maya to Unreal, without the integration crashing Unreal.
-        if sys.platform == "darwin":
+        if False and sys.platform == "darwin":
             self.logger.warning("SG TK Unreal integration is not available on Mac.")
             return LaunchInformation(exec_path, args, required_env)
 
