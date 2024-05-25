@@ -106,13 +106,14 @@ class UnrealEditorEngine(Engine):
 
     def init_qt_app(self):
         self.logger.debug("%s: Initializing QtApp for Unreal", self)
-        from sgtk.platform.qt5 import QtWidgets
 
-        if not QtWidgets.QApplication.instance():
-            self._qt_app = QtWidgets.QApplication(sys.argv)
+        from sgtk.platform.qt import QtGui
+
+        if not QtGui.QApplication.instance():
+            self._qt_app = QtGui.QApplication(sys.argv)
             self._qt_app.setQuitOnLastWindowClosed(False)
         else:
-            self._qt_app = QtWidgets.QApplication.instance()
+            self._qt_app = QtGui.QApplication.instance()
 
         # On other platforms than Windows, we need to process the Qt events otherwise
         # UIs are "frozen". We use a slate tick callback to do that on a regular basis.
@@ -131,8 +132,8 @@ class UnrealEditorEngine(Engine):
 
         :param float delta_time: delta time since the last run.
         """
-        from sgtk.platform.qt5 import QtWidgets
-        qapp = QtWidgets.QApplication.instance()
+        from sgtk.platform.qt import QtGui
+        qapp = QtGui.QApplication.instance()
         if qapp:
             qapp.processEvents()
 
