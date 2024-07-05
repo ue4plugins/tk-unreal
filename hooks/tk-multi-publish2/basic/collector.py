@@ -172,7 +172,6 @@ class UnrealSessionCollector(HookBaseClass):
         # Iterate through the selected assets and get their info and add them as items to be published
         for asset in unreal_sg.selected_assets:
             if asset.asset_class_path.asset_name == "LevelSequence":
-                self.logger.warning("%s.%s"% (asset.asset_class_path.package_name, asset.asset_class_path.asset_name))
                 if sequence_edits is None:
                     sequence_edits = self.retrieve_sequence_edits()
                 self.collect_level_sequence(parent_item, asset, sequence_edits)
