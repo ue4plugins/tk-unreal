@@ -287,10 +287,10 @@ class UnrealSessionCollector(HookBaseClass):
         """
         sequence_edits = defaultdict(list)
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
-        lclass = unreal.TopLevelAssetPath("/Script/LevelSequence", "LevelSequence")
+        level_sequence_class = unreal.TopLevelAssetPath("/Script/LevelSequence", "LevelSequence")
         asset_helper = unreal.AssetRegistryHelpers.get_asset_registry()
         # Retrieve all Level Sequence assets
-        all_level_sequences = asset_helper.get_assets_by_class(lclass)
+        all_level_sequences = asset_helper.get_assets_by_class(level_sequence_class)
         for lvseq_asset in all_level_sequences:
             lvseq = unreal.load_asset(unreal_sg.object_path(lvseq_asset), unreal.LevelSequence)
             # Check shots
