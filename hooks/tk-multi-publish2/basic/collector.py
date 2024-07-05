@@ -180,7 +180,7 @@ class UnrealSessionCollector(HookBaseClass):
                     parent_item,
                     # :class:`Name` instances, we cast them to strings otherwise
                     # string operations fail down the line..
-                    "%s" % asset.object_path,
+                    "%s" % unreal_sg.object_path(asset),
                     "%s" % asset.asset_class,
                     "%s" % asset.asset_name,
                 )
@@ -255,7 +255,8 @@ class UnrealSessionCollector(HookBaseClass):
         :param sequence_edits: A dictionary with  :class:`unreal.LevelSequence as keys and
                                               lists of :class:`SequenceEdit` as values.
         """
-        level_sequence = unreal.load_asset(asset.object_path)
+        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
+        level_sequence = unreal.load_asset(unreal_sg.object_path(asset))
         for edits_path in self.get_all_paths_from_sequence(level_sequence, sequence_edits):
             # Reverse the path to have it from top master sequence to the shot.
             edits_path.reverse()
@@ -284,12 +285,13 @@ class UnrealSessionCollector(HookBaseClass):
                   lists of :class:`SequenceEdit`.
         """
         sequence_edits = defaultdict(list)
+        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
 
         asset_helper = unreal.AssetRegistryHelpers.get_asset_registry()
         # Retrieve all Level Sequence assets
         all_level_sequences = asset_helper.get_assets_by_class("LevelSequence")
         for lvseq_asset in all_level_sequences:
-            lvseq = unreal.load_asset(lvseq_asset.object_path, unreal.LevelSequence)
+            lvseq = unreal.load_asset(unreal_sg.object_path(lvseq_asset), unreal.LevelSequence)
             # Check shots
             for track in lvseq.find_master_tracks_by_type(unreal.MovieSceneCinematicShotTrack):
                 for section in track.get_sections():
