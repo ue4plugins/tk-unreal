@@ -172,8 +172,9 @@ class UnrealSessionCollector(HookBaseClass):
         # Iterate through the selected assets and get their info and add them as items to be published
         for asset in unreal_sg.selected_assets:
             if asset.asset_class_path.asset_name == "LevelSequence":
+                self.logger.warning("%s.%s"% (asset.asset_class_path.package_name, asset.asset_class_path.asset_name))
                 if sequence_edits is None:
-                    sequence_edits = self.retrieve_sequence_edits(asset.asset_class_path)
+                    sequence_edits = self.retrieve_sequence_edits()
                 self.collect_level_sequence(parent_item, asset, sequence_edits)
             else:
                 self.create_asset_item(
@@ -276,21 +277,20 @@ class UnrealSessionCollector(HookBaseClass):
             # publishing.
             item.properties["edits_path"] = edits_path
 
-    def retrieve_sequence_edits(self, class_path):
+    def retrieve_sequence_edits(self):
         """
         Build a dictionary for all Level Sequences where keys are Level Sequences
         and values the list of edits they are in.
 
-        :param class_path: A :class:`TopLevelAssetPath`.
         :returns: A dictionary of :class:`unreal.LevelSequence` where values are
                   lists of :class:`SequenceEdit`.
         """
         sequence_edits = defaultdict(list)
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
-
+        lclass = unreal.TopLevelAssetPath("/Script/LevelSequence", "LevelSequence")
         asset_helper = unreal.AssetRegistryHelpers.get_asset_registry()
         # Retrieve all Level Sequence assets
-        all_level_sequences = asset_helper.get_assets_by_class(class_path)
+        all_level_sequences = asset_helper.get_assets_by_class(lclass)
         for lvseq_asset in all_level_sequences:
             lvseq = unreal.load_asset(unreal_sg.object_path(lvseq_asset), unreal.LevelSequence)
             # Check shots
