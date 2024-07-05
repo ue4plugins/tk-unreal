@@ -181,7 +181,7 @@ class UnrealSessionCollector(HookBaseClass):
                     # :class:`Name` instances, we cast them to strings otherwise
                     # string operations fail down the line..
                     "%s" % unreal_sg.object_path(asset),
-                    "%s" % asset.asset_class,
+                    "%s" % asset.asset_class_path.asset_name,
                     "%s" % asset.asset_name,
                 )
 

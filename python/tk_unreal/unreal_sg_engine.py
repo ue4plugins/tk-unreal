@@ -247,7 +247,7 @@ class ShotgunEngineWrapper(UESGEngine):
         # UE 5.1
         if hasattr(asset_data, "object_path"):
             return asset_data.object_path
-        return "%s.%s" (asset_data.package_name, asset_data.asset_name)
+        return "%s.%s" % (asset_data.package_name, asset_data.asset_name)
 
     """
     Menu generation functionality for Unreal (based on the 3ds max Menu Generation implementation)
