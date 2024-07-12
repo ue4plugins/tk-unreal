@@ -148,7 +148,7 @@ class ShotgunEngineWrapper(UESGEngine):
             # Asset must be loaded to read the metadata from item
             # Note that right-clicking on an asset in the Unreal Content Browser already loads item
             # But a load could be triggered if the context is from a selected actor
-            loaded_asset = unreal.EditorAssetLibrary.load_asset(selected_asset.object_path)
+            loaded_asset = unreal.EditorAssetLibrary.load_asset(self.object_path(selected_asset))
         elif selected_actor:
             # Get the asset that is associated with the selected actor
             assets = self.get_referenced_assets(selected_actor)
@@ -234,6 +234,20 @@ class ShotgunEngineWrapper(UESGEngine):
             engine.destroy()
             QtWidgets.QApplication.instance().quit()
             QtWidgets.QApplication.processEvents()
+
+    @staticmethod
+    def object_path(asset_data):
+        """
+        Return the object path for the given asset_data.
+
+        :param asset_data: A :class:`AssetData` instance.
+        :returns: A string.
+        """
+        # The attribute is not available anymore from
+        # UE 5.1
+        if hasattr(asset_data, "object_path"):
+            return asset_data.object_path
+        return "%s.%s" % (asset_data.package_name, asset_data.asset_name)
 
     """
     Menu generation functionality for Unreal (based on the 3ds max Menu Generation implementation)
