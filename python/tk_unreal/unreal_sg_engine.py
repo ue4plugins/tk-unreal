@@ -204,7 +204,7 @@ class ShotgunEngineWrapper(UESGEngine):
         unreal.log("{0} _execute_deferred called with {1}".format(self, callback.__str__()))
         self._callback = callback
 
-        from sgtk.platform.qt5 import QtCore
+        from sgtk.platform.qt import QtCore
         QtCore.QTimer.singleShot(0, self._execute_within_exception_trap)
 
     def _execute_within_exception_trap(self):
@@ -224,7 +224,7 @@ class ShotgunEngineWrapper(UESGEngine):
 
     @unreal.ufunction(override=True)
     def shutdown(self):
-        from sgtk.platform.qt5 import QtWidgets
+        from sgtk.platform.qt import QtGui
 
         engine = sgtk.platform.current_engine()
         if engine is not None:
@@ -232,8 +232,8 @@ class ShotgunEngineWrapper(UESGEngine):
 
             # destroy_engine of tk-unreal will take care of closing all dialogs that are still opened
             engine.destroy()
-            QtWidgets.QApplication.instance().quit()
-            QtWidgets.QApplication.processEvents()
+            QtGui.QApplication.instance().quit()
+            QtGui.QApplication.processEvents()
 
     @staticmethod
     def object_path(asset_data):
@@ -366,7 +366,7 @@ class ShotgunEngineWrapper(UESGEngine):
         """
         Callback to Jump to SG from context.
         """
-        from sgtk.platform.qt5 import QtGui, QtCore
+        from sgtk.platform.qt import QtGui, QtCore
         url = self._get_context_url(sgtk.platform.current_engine())
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
